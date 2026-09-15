@@ -1,26 +1,37 @@
 import { motion } from 'framer-motion'
 import { Check } from 'lucide-react'
-import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { HABIT_ICONS } from '@/data/habitIcons'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
-import type { DashboardHabit } from '@/types/dashboard'
+import { ProgressBar } from '@/components/ui/ProgressBar'
+import { EmptyState } from '@/components/ui/EmptyState'
+import { completeHabit, uncompleteHabit } from '@/lib/habitStore'
+import type { Habit, HabitEntry } from '@/types/habits'
+import { getHabitStatusForDate, getTodaysHabitsSummary } from '@/utils/habits'
+import { getTodayDateString } from '@/utils/dateRange'
 import { cn } from '@/utils/cn'
 
 export interface HabitsCardProps {
-  habits: DashboardHabit[]
+  habits: Habit[]
+  entries: HabitEntry[]
   className?: string
 }
 
-export function HabitsCard({ habits: initialHabits, className }: HabitsCardProps) {
-  const [habits, setHabits] = useState(initialHabits)
+const MAX_SHOWN = 5
 
-  function toggleHabit(id: string) {
-    setHabits((current) =>
-      current.map((habit) => (habit.id === id ? { ...habit, completed: !habit.completed } : habit)),
-    )
-  }
+/** Reads live habitStore state and writes back to it directly — no separate Dashboard-local habit state. */
+export function HabitsCard({ habits, entries, className }: HabitsCardProps) {
+  const today = getTodayDateString()
+  const summary = getTodaysHabitsSummary(habits, entries)
 
-  const completedCount = habits.filter((habit) => habit.completed).length
+  const scheduledToday = habits
+    .filter((habit) => getHabitStatusForDate(habit, entries, today) !== 'unscheduled' && habit.active)
+    .sort((a, b) => {
+      const aPending = getHabitStatusForDate(a, entries, today) === 'pending'
+      const bPending = getHabitStatusForDate(b, entries, today) === 'pending'
+      return aPending === bPending ? 0 : aPending ? -1 : 1
+    })
+    .slice(0, MAX_SHOWN)
 
   return (
     <Card padding="lg" className={cn('flex h-full flex-col', className)}>
@@ -28,56 +39,65 @@ export function HabitsCard({ habits: initialHabits, className }: HabitsCardProps
         <div>
           <CardTitle>Daily Habits</CardTitle>
           <p className="mt-0.5 text-xs text-text-muted">
-            {completedCount} of {habits.length} done today
+            {summary.completed} of {summary.scheduled} done today
           </p>
         </div>
         <Link to="/habits" className="shrink-0 text-xs font-medium text-accent hover:underline">
           View all
         </Link>
       </CardHeader>
-      <ul className="flex flex-1 flex-col divide-y divide-border">
-        {habits.map((habit) => (
-          <li key={habit.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-            <span
-              className={cn(
-                'flex size-8 shrink-0 items-center justify-center rounded-full',
-                habit.completed ? 'bg-accent-soft text-accent' : 'bg-surface-elevated text-text-muted',
-              )}
-            >
-              <habit.icon className="size-4" />
-            </span>
-            <span
-              className={cn(
-                'min-w-0 flex-1 truncate text-sm',
-                habit.completed ? 'text-text-muted line-through' : 'text-text-primary',
-              )}
-            >
-              {habit.label}
-            </span>
-            <button
-              type="button"
-              role="checkbox"
-              aria-checked={habit.completed}
-              aria-label={`Mark ${habit.label} as ${habit.completed ? 'not done' : 'done'}`}
-              onClick={() => toggleHabit(habit.id)}
-              className={cn(
-                'flex size-7 shrink-0 items-center justify-center rounded-full border transition-colors',
-                habit.completed
-                  ? 'border-accent bg-accent text-text-inverse'
-                  : 'border-border text-transparent hover:border-border-strong',
-              )}
-            >
-              <motion.span
-                initial={false}
-                animate={{ scale: habit.completed ? 1 : 0 }}
-                transition={{ duration: 0.15 }}
-              >
-                <Check className="size-3.5" strokeWidth={3} />
-              </motion.span>
-            </button>
-          </li>
-        ))}
-      </ul>
+
+      <div className="mb-3">
+        <ProgressBar value={summary.percent} max={100} color="accent" size="sm" />
+      </div>
+
+      {scheduledToday.length === 0 ? (
+        <EmptyState title="No habits scheduled today" className="py-6" />
+      ) : (
+        <ul className="flex flex-1 flex-col divide-y divide-border">
+          {scheduledToday.map((habit) => {
+            const Icon = HABIT_ICONS[habit.icon]
+            const completed = getHabitStatusForDate(habit, entries, today) === 'completed'
+            return (
+              <li key={habit.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                <span
+                  className={cn(
+                    'flex size-8 shrink-0 items-center justify-center rounded-full',
+                    completed ? 'bg-accent-soft text-accent' : 'bg-surface-elevated text-text-muted',
+                  )}
+                >
+                  <Icon className="size-4" />
+                </span>
+                <span
+                  className={cn(
+                    'min-w-0 flex-1 truncate text-sm',
+                    completed ? 'text-text-muted line-through' : 'text-text-primary',
+                  )}
+                >
+                  {habit.name}
+                </span>
+                <button
+                  type="button"
+                  role="checkbox"
+                  aria-checked={completed}
+                  aria-label={`Mark ${habit.name} as ${completed ? 'not done' : 'done'}`}
+                  onClick={() => (completed ? uncompleteHabit(habit.id) : completeHabit(habit.id))}
+                  className={cn(
+                    'flex size-7 shrink-0 items-center justify-center rounded-full border transition-colors',
+                    completed
+                      ? 'border-accent bg-accent text-text-inverse'
+                      : 'border-border text-transparent hover:border-border-strong',
+                  )}
+                >
+                  <motion.span initial={false} animate={{ scale: completed ? 1 : 0 }} transition={{ duration: 0.15 }}>
+                    <Check className="size-3.5" strokeWidth={3} />
+                  </motion.span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
     </Card>
   )
 }

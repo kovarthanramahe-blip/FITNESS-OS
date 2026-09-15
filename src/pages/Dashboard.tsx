@@ -18,17 +18,15 @@ import { LevelProgress } from '@/components/gamification/LevelProgress'
 import { mockDashboardData } from '@/data/mockDashboard'
 import { mockPersonalRecords } from '@/data/mockProgress'
 import { getProgramById } from '@/data/programs'
+import { useHabitStore } from '@/lib/habitStore'
 import { useNutritionStore } from '@/lib/nutritionStore'
 import { useProgressStore } from '@/lib/progressStore'
 import { useWorkoutStore } from '@/lib/workoutStore'
 import type { NutrientSummary } from '@/types/dashboard'
+import { getTodayDateString } from '@/utils/dateRange'
 import { getDailyTotals, goalToMacroTargets } from '@/utils/nutrition'
 import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
-
-function todayDateString(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 // Recharts is a heavy dependency — keep it out of the Dashboard's initial
 // bundle by loading the chart lazily, same pattern as route-level splitting.
@@ -65,10 +63,12 @@ export function Dashboard() {
   // though only calories and protein have a dedicated card on this page —
   // the Nutrition page is where the full macro breakdown lives.
   const { entries: foodEntries, goal: nutritionGoal } = useNutritionStore()
-  const dailyTotals = getDailyTotals(foodEntries, todayDateString())
+  const dailyTotals = getDailyTotals(foodEntries, getTodayDateString())
   const macroTargets = goalToMacroTargets(nutritionGoal)
   const calories: NutrientSummary = { label: 'Calories', unit: 'kcal', consumed: dailyTotals.calories, target: macroTargets.calories }
   const protein: NutrientSummary = { label: 'Protein', unit: 'g', consumed: dailyTotals.protein, target: macroTargets.protein }
+
+  const { habits, entries: habitEntries, waterLogs, waterGoal } = useHabitStore()
 
   return (
     <motion.div
@@ -113,7 +113,7 @@ export function Dashboard() {
         <NutrientProgressCard data={protein} icon={Beef} color="secondary" />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-3">
-        <WaterCard data={d.water} />
+        <WaterCard logs={waterLogs} goal={waterGoal} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-3">
         <StepsCard data={d.steps} />
@@ -130,7 +130,7 @@ export function Dashboard() {
       </motion.div>
 
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-5">
-        <HabitsCard habits={d.habits} />
+        <HabitsCard habits={habits} entries={habitEntries} />
       </motion.div>
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-7">
         <Suspense

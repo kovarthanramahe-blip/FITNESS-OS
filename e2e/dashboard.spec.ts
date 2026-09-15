@@ -24,11 +24,11 @@ test.describe('Dashboard', () => {
   test('adding 250 ml of water updates the displayed amount', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByText('2.1', { exact: true })).toBeVisible()
+    const before = await page.getByTestId('dashboard-water-consumed').innerText()
+    const beforeValue = Number(before.replace(/[^\d.]/g, ''))
 
     await page.getByRole('button', { name: 'Add 250 milliliters of water' }).click()
 
-    await expect(page.getByText('2.4', { exact: true })).toBeVisible()
-    await expect(page.getByText('2.1', { exact: true })).toHaveCount(0)
+    await expect(page.getByTestId('dashboard-water-consumed')).toHaveText(String(Math.round((beforeValue + 0.25) * 10) / 10))
   })
 })

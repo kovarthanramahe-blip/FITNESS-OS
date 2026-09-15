@@ -1,5 +1,3 @@
-import type { LucideIcon } from 'lucide-react'
-
 export type DayActivityStatus = 'complete' | 'rest' | 'missed' | 'upcoming'
 
 export interface DashboardHeaderData {
@@ -41,11 +39,6 @@ export interface NutrientSummary {
   target: number
 }
 
-export interface WaterSummary {
-  consumedMl: number
-  targetMl: number
-}
-
 export interface StepsSummary {
   steps: number
   target: number
@@ -83,20 +76,11 @@ export interface LevelSummary {
   xpToNextLevel: number
 }
 
-export interface DashboardHabit {
-  id: string
-  label: string
-  icon: LucideIcon
-  completed: boolean
-}
-
 export interface DashboardData {
   header: DashboardHeaderData
   dailyScore: DailyScoreData
-  water: WaterSummary
   steps: StepsSummary
   streak: StreakSummary
   level: LevelSummary
-  habits: DashboardHabit[]
   weeklyActivity: WeekActivityDay[]
 }

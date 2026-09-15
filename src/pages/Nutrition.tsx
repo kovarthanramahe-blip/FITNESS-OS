@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Droplets, Minus, Plus, Settings2 } from 'lucide-react'
+import { Settings2 } from 'lucide-react'
 import { useState } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
 import { Button } from '@/components/ui/Button'
@@ -14,35 +14,28 @@ import { NutritionHistoryChart } from '@/components/nutrition/NutritionHistoryCh
 import { NutritionInsights } from '@/components/nutrition/NutritionInsights'
 import { NutritionSummaryCards } from '@/components/nutrition/NutritionSummaryCards'
 import { TodaysWeightCard } from '@/components/nutrition/TodaysWeightCard'
-import { mockDashboardData } from '@/data/mockDashboard'
+import { WaterGoalModal } from '@/components/habits/WaterGoalModal'
+import { WaterTracker } from '@/components/habits/WaterTracker'
 import { addFoodEntry, deleteFoodEntry, editFoodEntry, setNutritionGoals, useNutritionStore } from '@/lib/nutritionStore'
+import { addWaterLog, removeLatestWaterLog, setWaterGoal, useHabitStore } from '@/lib/habitStore'
 import { useProgressStore } from '@/lib/progressStore'
 import { MEAL_TYPES } from '@/types/nutrition'
 import type { FoodEntry, MealType, NutritionTimeRange } from '@/types/nutrition'
-import { clamp } from '@/utils/format'
+import { getTodayDateString } from '@/utils/dateRange'
 import { getDailyNutrition, getNutritionHistory, goalToMacroTargets } from '@/utils/nutrition'
-
-const WATER_STEP_ML = 250
-
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
-}
 
 export function Nutrition() {
   const { entries, goal } = useNutritionStore()
   const { weightLogs } = useProgressStore()
+  const { waterLogs, waterGoal } = useHabitStore()
 
-  const [selectedDate, setSelectedDate] = useState(today())
+  const [selectedDate, setSelectedDate] = useState(getTodayDateString())
   const [isFoodModalOpen, setIsFoodModalOpen] = useState(false)
   const [editingEntry, setEditingEntry] = useState<FoodEntry | null>(null)
   const [modalDefaultMeal, setModalDefaultMeal] = useState<MealType>('breakfast')
   const [isGoalsModalOpen, setIsGoalsModalOpen] = useState(false)
+  const [isWaterGoalModalOpen, setIsWaterGoalModalOpen] = useState(false)
   const [historyRange, setHistoryRange] = useState<NutritionTimeRange>('30D')
-  const [waterMl, setWaterMl] = useState(mockDashboardData.water.consumedMl)
-
-  const waterTargetMl = mockDashboardData.water.targetMl
-  const waterGlasses = Math.round(waterTargetMl / WATER_STEP_ML)
-  const filledGlasses = Math.round(waterMl / WATER_STEP_ML)
 
   const daily = getDailyNutrition(entries, selectedDate)
   const targets = goalToMacroTargets(goal)
@@ -93,49 +86,13 @@ export function Nutrition() {
       </motion.div>
 
       <motion.div variants={staggerItem}>
-        <Card padding="lg">
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Droplets className="size-5 text-secondary" />
-              <CardTitle>Water Intake</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="secondary"
-                size="icon"
-                aria-label="Remove one glass of water"
-                onClick={() => setWaterMl((current) => clamp(current - WATER_STEP_ML, 0, waterTargetMl * 2))}
-              >
-                <Minus className="size-4" />
-              </Button>
-              <Button
-                variant="primary"
-                size="icon"
-                aria-label="Add one glass of water"
-                onClick={() => setWaterMl((current) => clamp(current + WATER_STEP_ML, 0, waterTargetMl * 2))}
-              >
-                <Plus className="size-4" />
-              </Button>
-            </div>
-          </CardHeader>
-          <div className="flex flex-wrap gap-2">
-            {Array.from({ length: waterGlasses }).map((_, index) => (
-              <span
-                key={index}
-                className={`flex size-9 items-center justify-center rounded-[var(--radius-sm)] border transition-colors ${
-                  index < filledGlasses
-                    ? 'border-secondary/40 bg-secondary-soft text-secondary'
-                    : 'border-border text-text-muted'
-                }`}
-              >
-                <Droplets className="size-4" />
-              </span>
-            ))}
-          </div>
-          <p className="mt-3 text-sm text-text-secondary">
-            {(waterMl / 1000).toFixed(2)} L of {(waterTargetMl / 1000).toFixed(1)} L goal
-          </p>
-        </Card>
+        <WaterTracker
+          logs={waterLogs}
+          goal={waterGoal}
+          onAdd={(amountMl) => addWaterLog(amountMl)}
+          onUndo={() => removeLatestWaterLog()}
+          onEditGoal={() => setIsWaterGoalModalOpen(true)}
+        />
       </motion.div>
 
       <motion.div variants={staggerItem} className="grid grid-cols-1 gap-4 lg:grid-cols-3">
@@ -180,6 +137,12 @@ export function Nutrition() {
         onClose={() => setIsGoalsModalOpen(false)}
         goal={goal}
         onSave={setNutritionGoals}
+      />
+      <WaterGoalModal
+        isOpen={isWaterGoalModalOpen}
+        onClose={() => setIsWaterGoalModalOpen(false)}
+        goal={waterGoal}
+        onSave={setWaterGoal}
       />
     </motion.div>
   )

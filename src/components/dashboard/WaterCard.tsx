@@ -1,26 +1,25 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { Droplets, Plus } from 'lucide-react'
-import { useState } from 'react'
 import { Card } from '@/components/ui/Card'
-import type { WaterSummary } from '@/types/dashboard'
+import { addWaterLog } from '@/lib/habitStore'
+import type { WaterGoal, WaterLog } from '@/types/habits'
+import { getDailyWaterMl, getWaterGoalPercent, mlToLiters } from '@/utils/habits'
+import { getTodayDateString } from '@/utils/dateRange'
 import { cn } from '@/utils/cn'
-import { clamp } from '@/utils/format'
 
 export interface WaterCardProps {
-  data: WaterSummary
+  logs: WaterLog[]
+  goal: WaterGoal
   className?: string
 }
 
 const QUICK_ADD_ML = [250, 500]
 
-export function WaterCard({ data, className }: WaterCardProps) {
-  const [consumedMl, setConsumedMl] = useState(data.consumedMl)
+/** Reads/writes the shared habitStore water state directly — no separate Dashboard-local water total. */
+export function WaterCard({ logs, goal, className }: WaterCardProps) {
   const prefersReducedMotion = useReducedMotion()
-  const percent = clamp((consumedMl / data.targetMl) * 100, 0, 100)
-
-  function addWater(amountMl: number) {
-    setConsumedMl((current) => clamp(current + amountMl, 0, data.targetMl * 2))
-  }
+  const consumedMl = getDailyWaterMl(logs, getTodayDateString())
+  const percent = getWaterGoalPercent(consumedMl, goal.goalMl)
 
   return (
     <Card padding="md" className={cn('flex h-full flex-col gap-3', className)}>
@@ -45,9 +44,9 @@ export function WaterCard({ data, className }: WaterCardProps) {
           />
         </div>
         <div className="min-w-0">
-          <p className="font-display text-2xl font-bold text-text-primary">
-            <span>{(consumedMl / 1000).toFixed(1)}</span>
-            <span className="text-sm font-normal text-text-muted">L / {(data.targetMl / 1000).toFixed(1)}L</span>
+          <p className="font-display text-2xl font-bold text-text-primary" data-testid="dashboard-water-total">
+            <span data-testid="dashboard-water-consumed">{mlToLiters(consumedMl)}</span>
+            <span className="text-sm font-normal text-text-muted">L / {mlToLiters(goal.goalMl)}L</span>
           </p>
           <p className="text-xs text-text-muted">{Math.round(percent)}% of daily goal</p>
         </div>
@@ -58,7 +57,7 @@ export function WaterCard({ data, className }: WaterCardProps) {
           <button
             key={amount}
             type="button"
-            onClick={() => addWater(amount)}
+            onClick={() => addWaterLog(amount)}
             aria-label={`Add ${amount} milliliters of water`}
             className="inline-flex flex-1 items-center justify-center gap-1 rounded-[var(--radius-sm)] border border-border bg-surface-elevated px-2 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-secondary/50 hover:text-secondary"
           >

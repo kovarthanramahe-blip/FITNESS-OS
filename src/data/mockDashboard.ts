@@ -1,13 +1,4 @@
-import type { DashboardData, DashboardHabit, WeekActivityDay } from '@/types/dashboard'
-import { mockHabits } from '@/data/mockHabits'
-
-const DASHBOARD_HABIT_IDS = ['workout', 'water', 'protein', 'steps', 'supplement', 'sleep']
-
-const dashboardHabits: DashboardHabit[] = DASHBOARD_HABIT_IDS.map((id) => {
-  const habit = mockHabits.find((candidate) => candidate.id === id)
-  if (!habit) throw new Error(`Missing habit "${id}" in mockHabits`)
-  return { id: habit.id, label: habit.name, icon: habit.icon, completed: habit.completedToday }
-})
+import type { DashboardData, WeekActivityDay } from '@/types/dashboard'
 
 const weeklyActivity: WeekActivityDay[] = [
   { day: 'Mon', status: 'complete', workoutMinutes: 50, caloriesBurned: 410 },
@@ -28,10 +19,6 @@ export const mockDashboardData: DashboardData = {
     score: 78,
     max: 100,
   },
-  water: {
-    consumedMl: 2100,
-    targetMl: 3000,
-  },
   steps: {
     steps: 7842,
     target: 10000,
@@ -44,6 +31,5 @@ export const mockDashboardData: DashboardData = {
     xp: 2840,
     xpToNextLevel: 3000,
   },
-  habits: dashboardHabits,
   weeklyActivity,
 }
