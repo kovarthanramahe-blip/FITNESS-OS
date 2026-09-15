@@ -1,4 +1,4 @@
-/** Shared Recharts styling for the Progress page's charts. */
+/** Shared Recharts styling — used by the Progress and Nutrition charts. */
 export const CHART_COLORS = {
   accent: '#B7F34A',
   secondary: '#45D6FF',

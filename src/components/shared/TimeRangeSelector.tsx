@@ -1,17 +1,17 @@
-import type { ProgressTimeRange } from '@/types/progress'
+import type { TimeRange } from '@/types/shared'
 import { Tab, TabList, Tabs } from '@/components/ui/Tabs'
 
 export interface TimeRangeSelectorProps {
-  value: ProgressTimeRange
-  onChange: (range: ProgressTimeRange) => void
+  value: TimeRange
+  onChange: (range: TimeRange) => void
   className?: string
 }
 
-const RANGES: ProgressTimeRange[] = ['7D', '30D', '3M', '6M', '1Y', 'ALL']
+const RANGES: TimeRange[] = ['7D', '30D', '3M', '6M', '1Y', 'ALL']
 
 export function TimeRangeSelector({ value, onChange, className }: TimeRangeSelectorProps) {
   return (
-    <Tabs value={value} onChange={(next) => onChange(next as ProgressTimeRange)} className={className}>
+    <Tabs value={value} onChange={(next) => onChange(next as TimeRange)} className={className}>
       <TabList>
         {RANGES.map((range) => (
           <Tab key={range} value={range}>

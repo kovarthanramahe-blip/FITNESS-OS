@@ -11,7 +11,7 @@ import {
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { ProgressTimeRange, WeightLog } from '@/types/progress'
 import { filterByRange } from '@/utils/progress'
-import { CHART_COLORS, chartTooltipStyle } from './chartTheme'
+import { CHART_COLORS, chartTooltipStyle } from '@/components/shared/chartTheme'
 
 export interface WeightChartProps {
   logs: WeightLog[]

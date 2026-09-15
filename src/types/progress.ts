@@ -95,4 +95,4 @@ export interface StrengthProgress {
 // Shared time-range filter for the Progress page's charts
 // ---------------------------------------------------------------------------
 
-export type ProgressTimeRange = '7D' | '30D' | '3M' | '6M' | '1Y' | 'ALL'
+export type { TimeRange as ProgressTimeRange } from './shared'

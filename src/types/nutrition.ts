@@ -1,22 +1,90 @@
-export interface MacroTotals {
-  calories: number
-  proteinG: number
-  carbsG: number
-  fatG: number
+export type { TimeRange as NutritionTimeRange } from './shared'
+
+export type MealType = 'breakfast' | 'lunch' | 'dinner' | 'snacks'
+
+export const MEAL_TYPES: MealType[] = ['breakfast', 'lunch', 'dinner', 'snacks']
+
+export const MEAL_LABELS: Record<MealType, string> = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+  snacks: 'Snacks',
 }
 
-export interface Meal {
+/**
+ * A food definition — either from the sample library (data/foodLibrary.ts)
+ * or created ad hoc by the user. Values are common estimates, never
+ * presented as medically precise.
+ */
+export interface FoodItem {
   id: string
   name: string
-  time: string
-  items: string[]
-  totals: MacroTotals
+  servingSize: number
+  servingUnit: string
+  calories: number
+  protein: number
+  carbohydrates: number
+  fat: number
+  fiber: number
+  sugar?: number
+  sodium?: number
 }
 
-export interface NutritionDay {
-  target: MacroTotals
-  consumed: MacroTotals
-  waterMl: number
-  waterTargetMl: number
-  meals: Meal[]
+/**
+ * A single logged food entry. Carries its own macro snapshot (and a
+ * `foodName` snapshot) rather than a live reference to `FoodItem`, so
+ * editing or removing a library food never rewrites history.
+ */
+export interface FoodEntry {
+  id: string
+  foodId: string
+  foodName: string
+  meal: MealType
+  quantity: number
+  servingUnit: string
+  calories: number
+  protein: number
+  carbohydrates: number
+  fat: number
+  fiber: number
+  /** ISO date string (yyyy-mm-dd) the entry is logged against. */
+  date: string
+  /** ISO timestamp the entry was created. */
+  createdAt: string
+}
+
+export interface MacroTotals {
+  calories: number
+  protein: number
+  carbohydrates: number
+  fat: number
+  fiber: number
+}
+
+/** Derived, read-only summary for one day — never stored directly. */
+export interface DailyNutrition {
+  date: string
+  totals: MacroTotals
+  entriesByMeal: Record<MealType, FoodEntry[]>
+}
+
+/**
+ * The user's daily macro targets. Neutral by design — supports
+ * maintenance, weight loss, or weight gain without assuming any one goal.
+ */
+export interface NutritionGoal {
+  dailyCalories: number
+  proteinGrams: number
+  carbohydrateGrams: number
+  fatGrams: number
+  fiberGrams?: number
+}
+
+/** A goal reshaped into the same units as `MacroTotals`, for progress math. */
+export interface MacroTargets {
+  calories: number
+  protein: number
+  carbohydrates: number
+  fat: number
+  fiber?: number
 }

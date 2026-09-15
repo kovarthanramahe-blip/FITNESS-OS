@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { StatCard } from '@/components/ui/StatCard'
+import { TimeRangeSelector } from '@/components/shared/TimeRangeSelector'
 import { addWeightLog, deleteWeightLog, setWeightGoal, updateWeightLog, useProgressStore } from '@/lib/progressStore'
 import type { ProgressTimeRange, WeightLog } from '@/types/progress'
 import {
@@ -15,7 +16,6 @@ import {
   getWeightChangeKg,
   isChangeTowardGoal,
 } from '@/utils/progress'
-import { TimeRangeSelector } from './TimeRangeSelector'
 import { WeightChart } from './WeightChart'
 import { WeightEntryModal } from './WeightEntryModal'
 import { WeightGoalModal } from './WeightGoalModal'

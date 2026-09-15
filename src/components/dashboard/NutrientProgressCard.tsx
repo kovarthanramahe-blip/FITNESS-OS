@@ -23,7 +23,7 @@ export function NutrientProgressCard({ data, icon: Icon, color, className }: Nut
   const remaining = getRemaining(data.consumed, data.target)
 
   return (
-    <Card padding="md" className={cn('flex h-full flex-col gap-3', className)}>
+    <Card padding="md" className={cn('flex h-full flex-col gap-3', className)} data-testid={`nutrient-${data.label.toLowerCase()}`}>
       <div className="flex items-center justify-between">
         <p className="text-sm text-text-secondary">{data.label}</p>
         <span className={cn('flex size-8 items-center justify-center rounded-full', iconAccent[color])}>
@@ -31,7 +31,7 @@ export function NutrientProgressCard({ data, icon: Icon, color, className }: Nut
         </span>
       </div>
       <p className="font-display text-2xl font-bold text-text-primary">
-        <span>{formatNumber(data.consumed)}</span>
+        <span data-testid="nutrient-consumed">{formatNumber(data.consumed)}</span>
         <span className="text-sm font-normal text-text-muted">
           {' '}
           / {formatNumber(data.target)} {data.unit}

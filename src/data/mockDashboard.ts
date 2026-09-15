@@ -28,18 +28,6 @@ export const mockDashboardData: DashboardData = {
     score: 78,
     max: 100,
   },
-  calories: {
-    label: 'Calories',
-    unit: 'kcal',
-    consumed: 1680,
-    target: 2200,
-  },
-  protein: {
-    label: 'Protein',
-    unit: 'g',
-    consumed: 118,
-    target: 150,
-  },
   water: {
     consumedMl: 2100,
     targetMl: 3000,

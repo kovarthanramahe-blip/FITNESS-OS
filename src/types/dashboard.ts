@@ -29,6 +29,11 @@ export interface WorkoutSummaryData {
   durationMinutes: number
 }
 
+/**
+ * Compact calorie/protein summary shown on the dashboard. Computed live
+ * from the nutrition store (see src/lib/nutritionStore.ts) rather than
+ * stored here, since it reflects real logged food entries.
+ */
 export interface NutrientSummary {
   label: string
   unit: string
@@ -88,8 +93,6 @@ export interface DashboardHabit {
 export interface DashboardData {
   header: DashboardHeaderData
   dailyScore: DailyScoreData
-  calories: NutrientSummary
-  protein: NutrientSummary
   water: WaterSummary
   steps: StepsSummary
   streak: StreakSummary

@@ -14,7 +14,7 @@ test.describe('Fitness OS navigation', () => {
 
     await page.getByRole('link', { name: 'Nutrition' }).first().click()
     await expect(page).toHaveURL(/\/nutrition$/)
-    await expect(page.getByRole('heading', { name: 'Nutrition' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Nutrition', exact: true })).toBeVisible()
 
     await page.getByRole('link', { name: 'Progress' }).first().click()
     await expect(page).toHaveURL(/\/progress$/)

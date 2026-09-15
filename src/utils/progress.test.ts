@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   getAverageWeeklyChangeKg,
+  getChangeFromPreviousEntry,
   getCurrentWeightLog,
   getHighestWeightLog,
   getLowestWeightLog,
@@ -147,6 +148,22 @@ describe('average weekly change', () => {
   it('handles duplicate dates without throwing', () => {
     const logs = [weightLog(14, 72), weightLog(14, 72.2), weightLog(0, 70)]
     expect(() => getAverageWeeklyChangeKg(logs)).not.toThrow()
+  })
+})
+
+describe('getChangeFromPreviousEntry', () => {
+  it('returns null with fewer than two entries', () => {
+    expect(getChangeFromPreviousEntry([])).toBeNull()
+    expect(getChangeFromPreviousEntry([weightLog(0, 70)])).toBeNull()
+  })
+
+  it('computes the change between the two most recent entries regardless of insertion order', () => {
+    const logs = [weightLog(0, 70), weightLog(7, 72)]
+    expect(getChangeFromPreviousEntry(logs)).toBe(-2)
+  })
+
+  it('returns 0 when the two most recent entries are equal', () => {
+    expect(getChangeFromPreviousEntry([weightLog(7, 70), weightLog(0, 70)])).toBe(0)
   })
 })
 

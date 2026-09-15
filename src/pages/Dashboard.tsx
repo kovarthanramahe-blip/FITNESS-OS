@@ -18,10 +18,17 @@ import { LevelProgress } from '@/components/gamification/LevelProgress'
 import { mockDashboardData } from '@/data/mockDashboard'
 import { mockPersonalRecords } from '@/data/mockProgress'
 import { getProgramById } from '@/data/programs'
+import { useNutritionStore } from '@/lib/nutritionStore'
 import { useProgressStore } from '@/lib/progressStore'
 import { useWorkoutStore } from '@/lib/workoutStore'
+import type { NutrientSummary } from '@/types/dashboard'
+import { getDailyTotals, goalToMacroTargets } from '@/utils/nutrition'
 import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10)
+}
 
 // Recharts is a heavy dependency — keep it out of the Dashboard's initial
 // bundle by loading the chart lazily, same pattern as route-level splitting.
@@ -53,6 +60,15 @@ export function Dashboard() {
     targetKg: weightGoal.targetWeightKg,
     trend: weightTrend,
   }
+
+  // Carbs/fat are derived alongside calories/protein for consistency, even
+  // though only calories and protein have a dedicated card on this page —
+  // the Nutrition page is where the full macro breakdown lives.
+  const { entries: foodEntries, goal: nutritionGoal } = useNutritionStore()
+  const dailyTotals = getDailyTotals(foodEntries, todayDateString())
+  const macroTargets = goalToMacroTargets(nutritionGoal)
+  const calories: NutrientSummary = { label: 'Calories', unit: 'kcal', consumed: dailyTotals.calories, target: macroTargets.calories }
+  const protein: NutrientSummary = { label: 'Protein', unit: 'g', consumed: dailyTotals.protein, target: macroTargets.protein }
 
   return (
     <motion.div
@@ -91,10 +107,10 @@ export function Dashboard() {
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-3">
-        <NutrientProgressCard data={d.calories} icon={UtensilsCrossed} color="accent" />
+        <NutrientProgressCard data={calories} icon={UtensilsCrossed} color="accent" />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-3">
-        <NutrientProgressCard data={d.protein} icon={Beef} color="secondary" />
+        <NutrientProgressCard data={protein} icon={Beef} color="secondary" />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-3">
         <WaterCard data={d.water} />

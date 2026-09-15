@@ -1,9 +1,12 @@
 import { getExerciseById } from '@/data/exercises'
 import type { PersonalRecord, ProgressTimeRange, StrengthProgress, StrengthProgressPoint, WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry, WorkoutSession, WorkoutSet } from '@/types/workout'
+import { filterByRange, isWithinRange } from '@/utils/dateRange'
 import { estimateOneRepMax } from '@/utils/personalRecords'
 import { getExerciseVolumeKg, getSessionVolumeKg } from '@/utils/workout'
 import { clamp } from '@/utils/format'
+
+export { filterByRange, isWithinRange }
 
 function round1(value: number): number {
   return Math.round(value * 10) / 10
@@ -15,33 +18,6 @@ function daysBetween(fromIso: string, toIso: string): number {
 
 function daysAgo(dateIso: string, now: Date): number {
   return (now.getTime() - new Date(dateIso).getTime()) / 86_400_000
-}
-
-// ---------------------------------------------------------------------------
-// Time range filtering — shared by weight, measurement and volume charts.
-// ---------------------------------------------------------------------------
-
-const RANGE_DAYS: Record<Exclude<ProgressTimeRange, 'ALL'>, number> = {
-  '7D': 7,
-  '30D': 30,
-  '3M': 90,
-  '6M': 180,
-  '1Y': 365,
-}
-
-export function isWithinRange(dateIso: string, range: ProgressTimeRange, now: Date = new Date()): boolean {
-  if (range === 'ALL') return true
-  const cutoff = now.getTime() - RANGE_DAYS[range] * 86_400_000
-  return new Date(dateIso).getTime() >= cutoff
-}
-
-export function filterByRange<T>(
-  items: T[],
-  getDate: (item: T) => string,
-  range: ProgressTimeRange,
-  now: Date = new Date(),
-): T[] {
-  return items.filter((item) => isWithinRange(getDate(item), range, now))
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +98,16 @@ export function getWeightChangeOverDays(logs: WeightLog[], days: number, now: Da
   const last = inWindow[inWindow.length - 1]
   if (!first || !last) return null
   return round1(last.weightKg - first.weightKg)
+}
+
+/** Change between the two most recent entries, or null with fewer than two logs. */
+export function getChangeFromPreviousEntry(logs: WeightLog[]): number | null {
+  const sorted = sortByDateAsc(logs)
+  if (sorted.length < 2) return null
+  const last = sorted[sorted.length - 1]
+  const previous = sorted[sorted.length - 2]
+  if (!last || !previous) return null
+  return round1(last.weightKg - previous.weightKg)
 }
 
 // ---------------------------------------------------------------------------

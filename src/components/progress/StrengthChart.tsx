@@ -1,7 +1,7 @@
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { StrengthProgressPoint } from '@/types/progress'
-import { CHART_COLORS, chartTooltipStyle } from './chartTheme'
+import { CHART_COLORS, chartTooltipStyle } from '@/components/shared/chartTheme'
 
 export interface StrengthChartProps {
   history: StrengthProgressPoint[]
