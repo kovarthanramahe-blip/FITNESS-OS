@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Beef, UtensilsCrossed } from 'lucide-react'
+import { Beef, Moon, Sparkles, UtensilsCrossed } from 'lucide-react'
 import { lazy, Suspense } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
 import { DailyScoreCard } from '@/components/dashboard/DailyScoreCard'
@@ -17,6 +17,9 @@ import { Skeleton } from '@/components/ui/LoadingState'
 import { LevelProgress } from '@/components/gamification/LevelProgress'
 import { mockDashboardData } from '@/data/mockDashboard'
 import { mockPersonalRecords } from '@/data/mockProgress'
+import { getProgramById } from '@/data/programs'
+import { useWorkoutStore } from '@/lib/workoutStore'
+import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
 
 // Recharts is a heavy dependency — keep it out of the Dashboard's initial
 // bundle by loading the chart lazily, same pattern as route-level splitting.
@@ -29,6 +32,11 @@ const RECENT_PR_COUNT = 3
 export function Dashboard() {
   const d = mockDashboardData
   const recentRecords = mockPersonalRecords.slice(0, RECENT_PR_COUNT)
+
+  const { selectedProgramId, currentDayIndex, activeSession } = useWorkoutStore()
+  const program = selectedProgramId ? getProgramById(selectedProgramId) : undefined
+  const programDay = program ? resolveProgramDay(program, currentDayIndex) : null
+  const workoutSummary = getTodaysWorkoutSummary(programDay, activeSession)
 
   return (
     <motion.div
@@ -45,7 +53,25 @@ export function Dashboard() {
         <DailyScoreCard data={d.dailyScore} />
       </motion.div>
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-8">
-        <TodaysWorkoutCard workout={d.workout} />
+        {workoutSummary ? (
+          <TodaysWorkoutCard workout={workoutSummary} />
+        ) : (
+          <Card elevated padding="lg" className="flex h-full flex-col items-center justify-center gap-2 text-center">
+            <span className="flex size-11 items-center justify-center rounded-full bg-purple-soft text-purple">
+              {programDay?.type === 'active-recovery' ? (
+                <Sparkles className="size-5" />
+              ) : (
+                <Moon className="size-5" />
+              )}
+            </span>
+            <p className="font-display text-lg font-semibold text-text-primary">
+              {programDay?.type === 'active-recovery' ? 'Active Recovery' : 'Rest Day'}
+            </p>
+            <p className="max-w-xs text-sm text-text-secondary">
+              Recovery is part of the program — planned rest days aren&rsquo;t missed days.
+            </p>
+          </Card>
+        )}
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-3">

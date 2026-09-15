@@ -1,24 +1,3 @@
-import type { WorkoutSession } from '@/types/workout'
-import type { WorkoutSummaryData } from '@/types/dashboard'
-
-/** Derives the dashboard's compact workout summary from a full workout session. */
-export function summarizeWorkout(session: WorkoutSession): WorkoutSummaryData {
-  const completedExercises = session.exercises.filter((exercise) =>
-    exercise.sets.every((set) => set.completed),
-  ).length
-
-  const muscleGroups = [...new Set(session.exercises.map((exercise) => exercise.muscleGroup))]
-
-  return {
-    id: session.id,
-    name: session.name,
-    muscleGroups,
-    totalExercises: session.exercises.length,
-    completedExercises,
-    durationMinutes: session.durationMinutes,
-  }
-}
-
 export function getScoreLabel(score: number, max = 100): string {
   const percent = (score / max) * 100
   if (percent >= 85) return 'Excellent day'

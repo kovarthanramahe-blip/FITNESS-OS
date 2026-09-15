@@ -15,6 +15,11 @@ export interface DailyScoreData {
   max: number
 }
 
+/**
+ * Compact summary of "today's workout" shown on the dashboard. Computed live
+ * from the workout store (see src/lib/workoutStore.ts) rather than stored
+ * here, since it reflects real session state.
+ */
 export interface WorkoutSummaryData {
   id: string
   name: string
@@ -78,7 +83,6 @@ export interface DashboardHabit {
 export interface DashboardData {
   header: DashboardHeaderData
   dailyScore: DailyScoreData
-  workout: WorkoutSummaryData
   calories: NutrientSummary
   protein: NutrientSummary
   water: WaterSummary

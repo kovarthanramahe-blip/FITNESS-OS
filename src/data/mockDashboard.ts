@@ -1,7 +1,5 @@
 import type { DashboardData, DashboardHabit, WeekActivityDay } from '@/types/dashboard'
 import { mockHabits } from '@/data/mockHabits'
-import { mockTodayWorkout } from '@/data/mockWorkout'
-import { summarizeWorkout } from '@/utils/dashboard'
 
 const DASHBOARD_HABIT_IDS = ['workout', 'water', 'protein', 'steps', 'supplement', 'sleep']
 
@@ -30,7 +28,6 @@ export const mockDashboardData: DashboardData = {
     score: 78,
     max: 100,
   },
-  workout: summarizeWorkout(mockTodayWorkout),
   calories: {
     label: 'Calories',
     unit: 'kcal',

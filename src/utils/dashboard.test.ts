@@ -1,50 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getRemaining, getScoreLabel, getWeightTrendStatus, summarizeWorkout } from './dashboard'
-import type { WorkoutSession } from '@/types/workout'
-
-function makeSession(completed: boolean[][]): WorkoutSession {
-  return {
-    id: 'session',
-    name: 'Test Session',
-    programLevel: 'Intermediate',
-    week: 1,
-    day: 1,
-    durationMinutes: 45,
-    estimatedCalories: 300,
-    completed: false,
-    exercises: completed.map((sets, exerciseIndex) => ({
-      id: `ex-${exerciseIndex}`,
-      name: `Exercise ${exerciseIndex}`,
-      muscleGroup: exerciseIndex === 0 ? 'Chest' : 'Back',
-      targetReps: '8-10',
-      restSeconds: 60,
-      sets: sets.map((isDone, setIndex) => ({
-        id: `set-${exerciseIndex}-${setIndex}`,
-        reps: 10,
-        weightKg: 20,
-        completed: isDone,
-      })),
-    })),
-  }
-}
-
-describe('summarizeWorkout', () => {
-  it('counts an exercise as complete only when every set is complete', () => {
-    const summary = summarizeWorkout(
-      makeSession([
-        [true, true],
-        [true, false],
-      ]),
-    )
-    expect(summary.totalExercises).toBe(2)
-    expect(summary.completedExercises).toBe(1)
-  })
-
-  it('dedupes muscle groups while preserving order', () => {
-    const summary = summarizeWorkout(makeSession([[true], [true], [true]]))
-    expect(summary.muscleGroups).toEqual(['Chest', 'Back'])
-  })
-})
+import { getRemaining, getScoreLabel, getWeightTrendStatus } from './dashboard'
 
 describe('getScoreLabel', () => {
   it('labels scores across the range', () => {
