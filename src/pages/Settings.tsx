@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
+import { AccountSection } from '@/components/settings/AccountSection'
 import { useToast } from '@/hooks/useToast'
 
 const settingsRows = [
@@ -116,8 +117,8 @@ export function Settings() {
         ))}
       </motion.div>
 
-      <motion.div variants={staggerItem} className="rounded-[var(--radius-lg)] border border-dashed border-border p-4 text-center text-xs text-text-muted">
-        Google Sign-In and Firebase-backed cloud sync will be added in a future phase.
+      <motion.div variants={staggerItem}>
+        <AccountSection />
       </motion.div>
     </motion.div>
   )
