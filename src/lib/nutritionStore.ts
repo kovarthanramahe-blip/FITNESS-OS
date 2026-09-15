@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { mockFoodEntries, mockNutritionGoal } from '@/data/mockFoodEntries'
+import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { FoodEntry, MacroTotals, MealType, NutritionGoal } from '@/types/nutrition'
 import { getDailyTotals, getEntriesForDate } from '@/utils/nutrition'
 
-const STORAGE_KEY = 'fitness-os:nutrition-store:v1'
+const BASE_STORAGE_KEY = 'fitness-os:nutrition-store:v1'
 
 export interface NutritionStoreState {
   entries: FoodEntry[]
@@ -11,6 +12,12 @@ export interface NutritionStoreState {
 }
 
 function createInitialState(): NutritionStoreState {
+  if (getCurrentUserId() !== null) {
+    return {
+      entries: [],
+      goal: mockNutritionGoal,
+    }
+  }
   return {
     entries: mockFoodEntries,
     goal: mockNutritionGoal,
@@ -22,7 +29,7 @@ function loadPersistedState(): NutritionStoreState {
   if (typeof window === 'undefined') return initial
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
     if (!raw) return initial
     const parsed = JSON.parse(raw) as Partial<NutritionStoreState>
     return {
@@ -37,7 +44,7 @@ function loadPersistedState(): NutritionStoreState {
 function persist(state: NutritionStoreState): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
   } catch {
     // Storage can fail (quota, private mode) — the session still works in-memory.
   }
@@ -45,6 +52,11 @@ function persist(state: NutritionStoreState): void {
 
 let state: NutritionStoreState = loadPersistedState()
 const listeners = new Set<() => void>()
+
+onUserScopeChange(() => {
+  state = loadPersistedState()
+  for (const listener of listeners) listener()
+})
 
 function setState(updater: (current: NutritionStoreState) => NutritionStoreState): void {
   state = updater(state)
@@ -146,7 +158,7 @@ export function resetNutritionStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(scopedStorageKey(BASE_STORAGE_KEY))
     } catch {
       // ignore
     }

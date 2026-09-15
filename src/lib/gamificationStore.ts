@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { BADGES, BADGES_BY_ID } from '@/data/gamification'
+import { onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Badge, ChallengeProgress, EarnedBadge, GamificationProfile, GamificationStats, XPEvent } from '@/types/gamification'
 import type { BadgeContext } from '@/utils/badgeEngine'
 import { evaluateBadges } from '@/utils/badgeEngine'
@@ -20,7 +21,7 @@ import { getStreakSummary } from '@/utils/streaks'
 
 const RECENT_XP_EVENT_LIMIT = 10
 
-const STORAGE_KEY = 'fitness-os:gamification-store:v1'
+const BASE_STORAGE_KEY = 'fitness-os:gamification-store:v1'
 
 /**
  * Only gamification-specific state lives here: the XP audit trail, which
@@ -49,7 +50,7 @@ function loadPersistedState(): GamificationStoreState {
   if (typeof window === 'undefined') return initial
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
     if (!raw) return initial
     const parsed = JSON.parse(raw) as Partial<GamificationStoreState>
     return {
@@ -66,7 +67,7 @@ function loadPersistedState(): GamificationStoreState {
 function persist(state: GamificationStoreState): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
   } catch {
     // Storage can fail (quota, private mode) — the session still works in-memory.
   }
@@ -74,6 +75,11 @@ function persist(state: GamificationStoreState): void {
 
 let state: GamificationStoreState = loadPersistedState()
 const listeners = new Set<() => void>()
+
+onUserScopeChange(() => {
+  state = loadPersistedState()
+  for (const listener of listeners) listener()
+})
 
 function setState(updater: (current: GamificationStoreState) => GamificationStoreState): void {
   state = updater(state)
@@ -206,7 +212,7 @@ export function resetGamificationStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(scopedStorageKey(BASE_STORAGE_KEY))
     } catch {
       // ignore
     }

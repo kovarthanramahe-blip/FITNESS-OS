@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addMeasurement,
   addWeightLog,
@@ -73,5 +74,44 @@ describe('body measurements', () => {
   it('supports a custom measurement type', () => {
     addMeasurement({ type: 'Neck', date: '2024-06-01', value: 38, unit: 'cm' })
     expect(getProgressState().measurements.some((m) => m.type === 'Neck')).toBe(true)
+  })
+})
+
+describe('authenticated zero-state', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetProgressStoreForTests()
+  })
+
+  it('starts a new authenticated user with no weight logs or measurements', () => {
+    setCurrentUserId('user-1')
+    resetProgressStoreForTests()
+
+    const state = getProgressState()
+    expect(state.weightLogs).toEqual([])
+    expect(state.measurements).toEqual([])
+    expect(state.weightGoal.startingWeightKg).toBe(0)
+    expect(state.weightGoal.targetWeightKg).toBe(0)
+  })
+
+  it('keeps guest/demo mode seeded with mock data', () => {
+    setCurrentUserId('user-1')
+    resetProgressStoreForTests()
+    setCurrentUserId(null)
+    resetProgressStoreForTests()
+
+    const state = getProgressState()
+    expect(state.weightLogs.length).toBeGreaterThan(0)
+    expect(state.measurements.length).toBeGreaterThan(0)
+  })
+
+  it('isolates two different users on the same device', () => {
+    setCurrentUserId('user-1')
+    resetProgressStoreForTests()
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    expect(getProgressState().weightLogs).toHaveLength(1)
+
+    setCurrentUserId('user-2')
+    expect(getProgressState().weightLogs).toEqual([])
   })
 })

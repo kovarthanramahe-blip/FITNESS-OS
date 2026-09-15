@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { mockCompletedSessions, mockWorkoutHistory, seedPersonalRecords } from '@/data/mockWorkoutHistory'
+import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { PersonalRecord } from '@/types/progress'
 import type {
   Difficulty,
@@ -16,7 +17,7 @@ import {
   instantiateWorkoutExercises,
 } from '@/utils/workout'
 
-const STORAGE_KEY = 'fitness-os:workout-store:v1'
+const BASE_STORAGE_KEY = 'fitness-os:workout-store:v1'
 const PR_XP_AWARD = 100
 
 export interface SessionCelebration {
@@ -50,13 +51,14 @@ export interface WorkoutStoreState {
 }
 
 function createInitialState(): WorkoutStoreState {
+  const isAuthenticated = getCurrentUserId() !== null
   return {
     selectedProgramId: 'intermediate-ppl',
     currentDayIndex: 0,
     activeSession: null,
     activeSessionPrIds: [],
-    history: mockWorkoutHistory,
-    personalRecords: seedPersonalRecords,
+    history: isAuthenticated ? [] : mockWorkoutHistory,
+    personalRecords: isAuthenticated ? [] : seedPersonalRecords,
     customWorkouts: [],
     celebration: null,
     lastCompletedSummary: null,
@@ -78,7 +80,7 @@ function loadPersistedState(): WorkoutStoreState {
   if (typeof window === 'undefined') return initial
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
     if (!raw) return initial
     const parsed = JSON.parse(raw) as Partial<PersistedShape>
     return {
@@ -108,7 +110,7 @@ function persist(state: WorkoutStoreState): void {
     customWorkouts: state.customWorkouts,
   }
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(toStore))
+    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(toStore))
   } catch {
     // Storage can fail (quota, private mode) — the session still works in-memory.
   }
@@ -116,6 +118,11 @@ function persist(state: WorkoutStoreState): void {
 
 let state: WorkoutStoreState = loadPersistedState()
 const listeners = new Set<() => void>()
+
+onUserScopeChange(() => {
+  state = loadPersistedState()
+  for (const listener of listeners) listener()
+})
 
 function setState(updater: (current: WorkoutStoreState) => WorkoutStoreState): void {
   state = updater(state)
@@ -142,6 +149,7 @@ export function getWorkoutState(): WorkoutStoreState {
 
 /** All completed sessions available for "last time" lookups, most recent first. */
 export function getCompletedSessionsMostRecentFirst(): WorkoutSession[] {
+  if (getCurrentUserId() !== null) return []
   return mockCompletedSessions
     .slice()
     .sort((a, b) => new Date(b.completedAt ?? b.startedAt).getTime() - new Date(a.completedAt ?? a.startedAt).getTime())
@@ -357,7 +365,7 @@ export function resetWorkoutStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(scopedStorageKey(BASE_STORAGE_KEY))
     } catch {
       // ignore
     }

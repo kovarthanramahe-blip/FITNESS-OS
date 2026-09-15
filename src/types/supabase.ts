@@ -11,7 +11,7 @@
  * TypeScript's inference through the Supabase client's generics.
  */
 
-export interface ProfileRow {
+export type ProfileRow = {
   id: string
   display_name: string | null
   avatar_url: string | null
@@ -20,7 +20,7 @@ export interface ProfileRow {
   updated_at: string
 }
 
-export interface WorkoutSessionRow {
+export type WorkoutSessionRow = {
   id: string
   user_id: string
   client_session_id: string
@@ -37,7 +37,7 @@ export interface WorkoutSessionRow {
   created_at: string
 }
 
-export interface WorkoutExerciseRow {
+export type WorkoutExerciseRow = {
   id: string
   user_id: string
   session_id: string
@@ -49,7 +49,7 @@ export interface WorkoutExerciseRow {
   position: number
 }
 
-export interface WorkoutSetRow {
+export type WorkoutSetRow = {
   id: string
   user_id: string
   exercise_id: string
@@ -62,7 +62,7 @@ export interface WorkoutSetRow {
   notes: string | null
 }
 
-export interface PersonalRecordRow {
+export type PersonalRecordRow = {
   id: string
   user_id: string
   client_record_id: string
@@ -76,7 +76,7 @@ export interface PersonalRecordRow {
   created_at: string
 }
 
-export interface WeightLogRow {
+export type WeightLogRow = {
   id: string
   user_id: string
   client_log_id: string
@@ -86,7 +86,7 @@ export interface WeightLogRow {
   created_at: string
 }
 
-export interface BodyMeasurementRow {
+export type BodyMeasurementRow = {
   id: string
   user_id: string
   client_measurement_id: string
@@ -98,7 +98,7 @@ export interface BodyMeasurementRow {
   created_at: string
 }
 
-export interface WeightGoalRow {
+export type WeightGoalRow = {
   user_id: string
   starting_weight_kg: number
   target_weight_kg: number
@@ -106,7 +106,7 @@ export interface WeightGoalRow {
   updated_at: string
 }
 
-export interface NutritionGoalRow {
+export type NutritionGoalRow = {
   user_id: string
   daily_calories: number
   protein_grams: number
@@ -116,7 +116,7 @@ export interface NutritionGoalRow {
   updated_at: string
 }
 
-export interface FoodEntryRow {
+export type FoodEntryRow = {
   id: string
   user_id: string
   client_entry_id: string
@@ -134,7 +134,7 @@ export interface FoodEntryRow {
   created_at: string
 }
 
-export interface HabitRow {
+export type HabitRow = {
   id: string
   user_id: string
   client_habit_id: string
@@ -154,7 +154,7 @@ export interface HabitRow {
   updated_at: string
 }
 
-export interface HabitEntryRow {
+export type HabitEntryRow = {
   id: string
   user_id: string
   habit_id: string
@@ -163,14 +163,14 @@ export interface HabitEntryRow {
   completed_at: string
 }
 
-export interface WaterGoalRow {
+export type WaterGoalRow = {
   user_id: string
   goal_ml: number
   preferred_unit: string
   updated_at: string
 }
 
-export interface WaterLogRow {
+export type WaterLogRow = {
   id: string
   user_id: string
   client_log_id: string
@@ -179,12 +179,12 @@ export interface WaterLogRow {
   created_at: string
 }
 
-export interface GamificationProfileRow {
+export type GamificationProfileRow = {
   user_id: string
   created_at: string
 }
 
-export interface XpEventRow {
+export type XpEventRow = {
   user_id: string
   event_id: string
   event_type: string
@@ -195,13 +195,13 @@ export interface XpEventRow {
   created_at: string
 }
 
-export interface EarnedBadgeRow {
+export type EarnedBadgeRow = {
   user_id: string
   badge_id: string
   earned_at: string
 }
 
-export interface ChallengeCompletionRow {
+export type ChallengeCompletionRow = {
   user_id: string
   instance_id: string
   completed_at: string
@@ -214,92 +214,113 @@ export interface Database {
         Row: ProfileRow
         Insert: Pick<ProfileRow, 'id'> & Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>>
         Update: Partial<Omit<ProfileRow, 'id' | 'created_at' | 'updated_at'>>
+        Relationships: []
       }
       workout_sessions: {
         Row: WorkoutSessionRow
         Insert: Omit<WorkoutSessionRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<WorkoutSessionRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       workout_exercises: {
         Row: WorkoutExerciseRow
         Insert: Omit<WorkoutExerciseRow, 'id'> & { id?: string }
         Update: Partial<Omit<WorkoutExerciseRow, 'id'>>
+        Relationships: []
       }
       workout_sets: {
         Row: WorkoutSetRow
         Insert: Omit<WorkoutSetRow, 'id'> & { id?: string }
         Update: Partial<Omit<WorkoutSetRow, 'id'>>
+        Relationships: []
       }
       personal_records: {
         Row: PersonalRecordRow
         Insert: Omit<PersonalRecordRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<PersonalRecordRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       weight_logs: {
         Row: WeightLogRow
         Insert: Omit<WeightLogRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<WeightLogRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       body_measurements: {
         Row: BodyMeasurementRow
         Insert: Omit<BodyMeasurementRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<BodyMeasurementRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       weight_goals: {
         Row: WeightGoalRow
         Insert: Omit<WeightGoalRow, 'updated_at'>
         Update: Partial<Omit<WeightGoalRow, 'user_id' | 'updated_at'>>
+        Relationships: []
       }
       nutrition_goals: {
         Row: NutritionGoalRow
         Insert: Omit<NutritionGoalRow, 'updated_at'>
         Update: Partial<Omit<NutritionGoalRow, 'user_id' | 'updated_at'>>
+        Relationships: []
       }
       food_entries: {
         Row: FoodEntryRow
         Insert: Omit<FoodEntryRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<FoodEntryRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       habits: {
         Row: HabitRow
         Insert: Omit<HabitRow, 'id' | 'created_at' | 'updated_at'> & { id?: string }
         Update: Partial<Omit<HabitRow, 'id' | 'created_at' | 'updated_at'>>
+        Relationships: []
       }
       habit_entries: {
         Row: HabitEntryRow
         Insert: Omit<HabitEntryRow, 'id' | 'completed_at'> & { id?: string; completed_at?: string }
         Update: Partial<Omit<HabitEntryRow, 'id'>>
+        Relationships: []
       }
       water_goals: {
         Row: WaterGoalRow
         Insert: Omit<WaterGoalRow, 'updated_at'>
         Update: Partial<Omit<WaterGoalRow, 'user_id' | 'updated_at'>>
+        Relationships: []
       }
       water_logs: {
         Row: WaterLogRow
         Insert: Omit<WaterLogRow, 'id' | 'created_at'> & { id?: string }
         Update: Partial<Omit<WaterLogRow, 'id' | 'created_at'>>
+        Relationships: []
       }
       gamification_profiles: {
         Row: GamificationProfileRow
         Insert: GamificationProfileRow
         Update: Partial<Omit<GamificationProfileRow, 'user_id'>>
+        Relationships: []
       }
       xp_events: {
         Row: XpEventRow
         Insert: Omit<XpEventRow, 'created_at'>
         Update: Partial<Omit<XpEventRow, 'user_id' | 'event_id' | 'created_at'>>
+        Relationships: []
       }
       earned_badges: {
         Row: EarnedBadgeRow
         Insert: Omit<EarnedBadgeRow, 'earned_at'> & { earned_at?: string }
         Update: Partial<Omit<EarnedBadgeRow, 'user_id' | 'badge_id'>>
+        Relationships: []
       }
       challenge_completions: {
         Row: ChallengeCompletionRow
         Insert: Omit<ChallengeCompletionRow, 'completed_at'> & { completed_at?: string }
         Update: Partial<Omit<ChallengeCompletionRow, 'user_id' | 'instance_id'>>
+        Relationships: []
       }
     }
+    Views: Record<string, never>
+    Functions: Record<string, never>
+    Enums: Record<string, never>
   }
 }

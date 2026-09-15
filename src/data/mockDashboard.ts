@@ -11,10 +11,6 @@ const weeklyActivity: WeekActivityDay[] = [
 ]
 
 export const mockDashboardData: DashboardData = {
-  header: {
-    name: 'Kovarthan',
-    fullName: 'Kovarthan Ramahe',
-  },
   dailyScore: {
     score: 78,
     max: 100,

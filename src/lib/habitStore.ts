@@ -1,10 +1,11 @@
 import { useSyncExternalStore } from 'react'
 import { mockHabitEntries, mockHabits, mockWaterGoal, mockWaterLogs } from '@/data/mockHabits'
+import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Habit, HabitEntry, HabitIconKey, HabitSchedule, WaterGoal, WaterLog } from '@/types/habits'
 import { getTodayDateString } from '@/utils/dateRange'
 import { getLatestWaterLogForDate } from '@/utils/habits'
 
-const STORAGE_KEY = 'fitness-os:habit-store:v1'
+const BASE_STORAGE_KEY = 'fitness-os:habit-store:v1'
 
 export interface HabitStoreState {
   habits: Habit[]
@@ -14,6 +15,14 @@ export interface HabitStoreState {
 }
 
 function createInitialState(): HabitStoreState {
+  if (getCurrentUserId() !== null) {
+    return {
+      habits: [],
+      entries: [],
+      waterLogs: [],
+      waterGoal: mockWaterGoal,
+    }
+  }
   return {
     habits: mockHabits,
     entries: mockHabitEntries,
@@ -27,7 +36,7 @@ function loadPersistedState(): HabitStoreState {
   if (typeof window === 'undefined') return initial
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
     if (!raw) return initial
     const parsed = JSON.parse(raw) as Partial<HabitStoreState>
     return {
@@ -44,7 +53,7 @@ function loadPersistedState(): HabitStoreState {
 function persist(state: HabitStoreState): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
   } catch {
     // Storage can fail (quota, private mode) — the session still works in-memory.
   }
@@ -52,6 +61,11 @@ function persist(state: HabitStoreState): void {
 
 let state: HabitStoreState = loadPersistedState()
 const listeners = new Set<() => void>()
+
+onUserScopeChange(() => {
+  state = loadPersistedState()
+  for (const listener of listeners) listener()
+})
 
 function setState(updater: (current: HabitStoreState) => HabitStoreState): void {
   state = updater(state)
@@ -188,7 +202,7 @@ export function resetHabitStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(scopedStorageKey(BASE_STORAGE_KEY))
     } catch {
       // ignore
     }

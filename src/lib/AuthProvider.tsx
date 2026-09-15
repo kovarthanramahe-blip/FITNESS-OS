@@ -2,6 +2,7 @@ import type { Session } from '@supabase/supabase-js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext, type AuthContextValue } from '@/lib/authContext'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
+import { setCurrentUserId } from '@/lib/storageScope'
 import type { AuthError, AuthUser } from '@/types/auth'
 
 function mapSessionUser(session: Session | null): AuthUser | null {
@@ -120,6 +121,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearError = useCallback(() => setError(null), [])
 
   const user = useMemo(() => mapSessionUser(session), [session])
+
+  useEffect(() => {
+    if (loading) return
+    setCurrentUserId(user?.id ?? null)
+  }, [user, loading])
 
   const value = useMemo<AuthContextValue>(
     () => ({

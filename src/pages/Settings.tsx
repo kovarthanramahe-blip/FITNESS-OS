@@ -1,10 +1,7 @@
 import { motion } from 'framer-motion'
-import { ChevronRight, Download, Moon, User as UserIcon, Watch } from 'lucide-react'
+import { ChevronRight, Download, Moon, Watch } from 'lucide-react'
 import { useState } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
-import { Avatar } from '@/components/ui/Avatar'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
@@ -31,19 +28,7 @@ export function Settings() {
       </motion.div>
 
       <motion.div variants={staggerItem}>
-        <Card padding="lg" className="flex items-center gap-4">
-          <Avatar name="Kovarthan Ramahe" size="xl" />
-          <div className="min-w-0 flex-1">
-            <p className="font-display text-lg font-semibold text-text-primary">Kovarthan Ramahe</p>
-            <p className="truncate text-sm text-text-secondary">kovarthanramahe@gmail.com</p>
-            <Badge variant="purple" className="mt-2">
-              Level 7 · Intermediate Program
-            </Badge>
-          </div>
-          <Button variant="secondary" size="sm" leftIcon={<UserIcon className="size-4" />}>
-            Edit
-          </Button>
-        </Card>
+        <AccountSection />
       </motion.div>
 
       <motion.div variants={staggerItem}>
@@ -115,10 +100,6 @@ export function Settings() {
             <ChevronRight className="size-4 text-text-muted" />
           </Card>
         ))}
-      </motion.div>
-
-      <motion.div variants={staggerItem}>
-        <AccountSection />
       </motion.div>
     </motion.div>
   )

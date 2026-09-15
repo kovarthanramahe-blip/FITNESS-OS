@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addHabit,
   addWaterLog,
@@ -184,5 +185,42 @@ describe('persistence', () => {
     const parsed = JSON.parse(raw!)
     expect(parsed.habits.some((h: { name: string }) => h.name === 'Read 10 pages')).toBe(true)
     expect(parsed.waterLogs.some((w: { amountMl: number }) => w.amountMl === 250)).toBe(true)
+  })
+})
+
+describe('authenticated zero-state', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetHabitStoreForTests()
+  })
+
+  it('starts a new authenticated user with no habits, entries, or water logs', () => {
+    setCurrentUserId('user-1')
+    resetHabitStoreForTests()
+
+    const state = getHabitState()
+    expect(state.habits).toEqual([])
+    expect(state.entries).toEqual([])
+    expect(state.waterLogs).toEqual([])
+  })
+
+  it('keeps guest/demo mode seeded with mock data', () => {
+    setCurrentUserId('user-1')
+    resetHabitStoreForTests()
+    setCurrentUserId(null)
+    resetHabitStoreForTests()
+
+    const state = getHabitState()
+    expect(state.habits.length).toBeGreaterThan(0)
+  })
+
+  it('isolates two different users on the same device', () => {
+    setCurrentUserId('user-1')
+    resetHabitStoreForTests()
+    addHabit(SAMPLE_HABIT)
+    expect(getHabitState().habits).toHaveLength(1)
+
+    setCurrentUserId('user-2')
+    expect(getHabitState().habits).toEqual([])
   })
 })

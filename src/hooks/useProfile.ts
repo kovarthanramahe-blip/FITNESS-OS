@@ -1,12 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { fetchProfile, type Profile } from '@/lib/profileService'
+import { fetchProfile, updateProfile, type Profile } from '@/lib/profileService'
+
+export interface UpdateProfileResult {
+  success: boolean
+  /** User-friendly message only — never the raw Supabase/PostgREST error. */
+  error?: string
+}
 
 export interface UseProfileResult {
   profile: Profile | null
   loading: boolean
   /** User-friendly message only — never the raw Supabase/PostgREST error. */
   error: string | null
+  /** True only while a display-name save request is in flight. */
+  isSaving: boolean
+  /** Persists a new display name and, on success, updates `profile` immediately. */
+  updateDisplayName: (displayName: string) => Promise<UpdateProfileResult>
 }
 
 /**
@@ -21,6 +31,7 @@ export function useProfile(): UseProfileResult {
   const [fetchedProfile, setFetchedProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
 
   const enabled = Boolean(user) && isSupabaseConfigured
 
@@ -49,6 +60,29 @@ export function useProfile(): UseProfileResult {
     }
   }, [user, isSupabaseConfigured])
 
+  const updateDisplayName = useCallback(
+    async (displayName: string): Promise<UpdateProfileResult> => {
+      const trimmed = displayName.trim()
+      if (!trimmed) return { success: false, error: 'Please enter a name.' }
+      if (!user || !isSupabaseConfigured) {
+        return { success: false, error: 'Cloud sign-in isn’t configured for this environment.' }
+      }
+
+      setIsSaving(true)
+      try {
+        const updated = await updateProfile(user.id, { displayName: trimmed })
+        setFetchedProfile(updated)
+        return { success: true }
+      } catch (caughtError: unknown) {
+        console.error('[Fitness OS] Failed to update profile:', caughtError)
+        return { success: false, error: 'We couldn’t save your name. Please try again.' }
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [user, isSupabaseConfigured],
+  )
+
   // Derived, not reset via effect: signing out (or Supabase becoming
   // unconfigured) immediately reports "no profile" on the very next
   // render, without needing a synchronous setState-in-effect to clear it.
@@ -56,5 +90,7 @@ export function useProfile(): UseProfileResult {
     profile: enabled ? fetchedProfile : null,
     loading: enabled && loading,
     error: enabled ? error : null,
+    isSaving: enabled && isSaving,
+    updateDisplayName,
   }
 }

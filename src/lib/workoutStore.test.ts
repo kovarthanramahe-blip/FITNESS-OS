@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addSet,
   completeSession,
   deleteCustomWorkout,
   discardSession,
+  getCompletedSessionsMostRecentFirst,
   getWorkoutState,
   resetWorkoutStoreForTests,
   saveCustomWorkout,
@@ -159,5 +161,50 @@ describe('custom workouts', () => {
     const state = getWorkoutState()
     expect(state.customWorkouts).toHaveLength(1)
     expect(state.customWorkouts[0]?.name).toBe('Renamed')
+  })
+})
+
+describe('authenticated zero-state', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetWorkoutStoreForTests()
+  })
+
+  it('starts a new authenticated user with no workout history or personal records', () => {
+    setCurrentUserId('user-1')
+    resetWorkoutStoreForTests()
+
+    const state = getWorkoutState()
+    expect(state.history).toEqual([])
+    expect(state.personalRecords).toEqual([])
+  })
+
+  it('does not use demo "last performance" data for a new authenticated user', () => {
+    setCurrentUserId('user-1')
+    resetWorkoutStoreForTests()
+
+    expect(getCompletedSessionsMostRecentFirst()).toEqual([])
+  })
+
+  it('keeps guest/demo mode seeded with mock data, unaffected by authenticated scoping', () => {
+    setCurrentUserId('user-1')
+    resetWorkoutStoreForTests()
+    setCurrentUserId(null)
+    resetWorkoutStoreForTests()
+
+    const state = getWorkoutState()
+    expect(state.history.length).toBeGreaterThan(0)
+    expect(state.personalRecords.length).toBeGreaterThan(0)
+  })
+
+  it('isolates two different users on the same device', () => {
+    setCurrentUserId('user-1')
+    resetWorkoutStoreForTests()
+    startSession(sampleWorkout, 'Intermediate')
+    completeSession()
+    expect(getWorkoutState().history).toHaveLength(1)
+
+    setCurrentUserId('user-2')
+    expect(getWorkoutState().history).toEqual([])
   })
 })

@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addFoodEntry,
   clearDailyEntries,
@@ -118,5 +119,38 @@ describe('persistence', () => {
     const raw = window.localStorage.getItem('fitness-os:nutrition-store:v1')
     const parsed = JSON.parse(raw!)
     expect(parsed.entries).toHaveLength(countAfterAdd)
+  })
+})
+
+describe('authenticated zero-state', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetNutritionStoreForTests()
+  })
+
+  it('starts a new authenticated user with no food entries', () => {
+    setCurrentUserId('user-1')
+    resetNutritionStoreForTests()
+
+    expect(getNutritionState().entries).toEqual([])
+  })
+
+  it('keeps guest/demo mode seeded with mock data', () => {
+    setCurrentUserId('user-1')
+    resetNutritionStoreForTests()
+    setCurrentUserId(null)
+    resetNutritionStoreForTests()
+
+    expect(getNutritionState().entries.length).toBeGreaterThan(0)
+  })
+
+  it('isolates two different users on the same device', () => {
+    setCurrentUserId('user-1')
+    resetNutritionStoreForTests()
+    addFoodEntry(SAMPLE_ENTRY)
+    expect(getNutritionState().entries).toHaveLength(1)
+
+    setCurrentUserId('user-2')
+    expect(getNutritionState().entries).toEqual([])
   })
 })

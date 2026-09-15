@@ -17,8 +17,8 @@ import { WeightCard } from '@/components/dashboard/WeightCard'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/LoadingState'
 import { mockDashboardData } from '@/data/mockDashboard'
-import { mockPersonalRecords } from '@/data/mockProgress'
 import { getProgramById } from '@/data/programs'
+import { useDisplayIdentity } from '@/hooks/useDisplayIdentity'
 import { getGamificationStats, useGamificationStore } from '@/lib/gamificationStore'
 import { useHabitStore } from '@/lib/habitStore'
 import { useNutritionStore } from '@/lib/nutritionStore'
@@ -40,12 +40,21 @@ const RECENT_PR_COUNT = 3
 
 export function Dashboard() {
   const d = mockDashboardData
-  const recentRecords = mockPersonalRecords.slice(0, RECENT_PR_COUNT)
+  const identity = useDisplayIdentity()
+  const header = { name: identity.name, fullName: identity.fullName, avatarUrl: identity.avatarUrl }
+  // These two widgets have no real backing store — for a guest/demo session they keep
+  // showing the sample numbers, but a real authenticated user never sees fabricated
+  // metrics that don't reflect anything they've actually done.
+  const dailyScore = identity.isGuest ? d.dailyScore : { score: 0, max: d.dailyScore.max }
+  const steps = identity.isGuest ? d.steps : { steps: 0, target: d.steps.target }
 
-  const { selectedProgramId, currentDayIndex, activeSession } = useWorkoutStore()
+  const { selectedProgramId, currentDayIndex, activeSession, personalRecords } = useWorkoutStore()
   const program = selectedProgramId ? getProgramById(selectedProgramId) : undefined
   const programDay = program ? resolveProgramDay(program, currentDayIndex) : null
   const workoutSummary = getTodaysWorkoutSummary(programDay, activeSession)
+  const recentRecords = [...personalRecords]
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, RECENT_PR_COUNT)
 
   const { weightLogs, weightGoal } = useProgressStore()
   const currentWeightLog = getCurrentWeightLog(weightLogs)
@@ -89,11 +98,11 @@ export function Dashboard() {
       className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-12 lg:gap-6"
     >
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-12">
-        <DashboardHeader header={d.header} />
+        <DashboardHeader header={header} />
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-4">
-        <DailyScoreCard data={d.dailyScore} />
+        <DailyScoreCard data={dailyScore} />
       </motion.div>
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-8">
         {workoutSummary ? (
@@ -127,11 +136,11 @@ export function Dashboard() {
         <WaterCard logs={waterLogs} goal={waterGoal} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-3">
-        <StepsCard data={d.steps} />
+        <StepsCard data={steps} />
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-4">
-        <WeightCard data={weight} />
+        <WeightCard data={weight} hasData={currentWeightLog !== null} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-4">
         <XPProgressCard stats={gamificationStats} />

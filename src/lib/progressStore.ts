@@ -1,9 +1,10 @@
 import { useSyncExternalStore } from 'react'
 import { mockMeasurements } from '@/data/mockMeasurements'
 import { mockWeightGoal, mockWeightLogs } from '@/data/mockWeightLog'
+import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { BodyMeasurement, WeightGoal, WeightLog } from '@/types/progress'
 
-const STORAGE_KEY = 'fitness-os:progress-store:v1'
+const BASE_STORAGE_KEY = 'fitness-os:progress-store:v1'
 
 export interface ProgressStoreState {
   weightLogs: WeightLog[]
@@ -12,6 +13,13 @@ export interface ProgressStoreState {
 }
 
 function createInitialState(): ProgressStoreState {
+  if (getCurrentUserId() !== null) {
+    return {
+      weightLogs: [],
+      weightGoal: { startingWeightKg: 0, targetWeightKg: 0, startDate: new Date().toISOString().slice(0, 10) },
+      measurements: [],
+    }
+  }
   return {
     weightLogs: mockWeightLogs,
     weightGoal: mockWeightGoal,
@@ -24,7 +32,7 @@ function loadPersistedState(): ProgressStoreState {
   if (typeof window === 'undefined') return initial
 
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY)
+    const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
     if (!raw) return initial
     const parsed = JSON.parse(raw) as Partial<ProgressStoreState>
     return {
@@ -40,7 +48,7 @@ function loadPersistedState(): ProgressStoreState {
 function persist(state: ProgressStoreState): void {
   if (typeof window === 'undefined') return
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
   } catch {
     // Storage can fail (quota, private mode) — the session still works in-memory.
   }
@@ -48,6 +56,11 @@ function persist(state: ProgressStoreState): void {
 
 let state: ProgressStoreState = loadPersistedState()
 const listeners = new Set<() => void>()
+
+onUserScopeChange(() => {
+  state = loadPersistedState()
+  for (const listener of listeners) listener()
+})
 
 function setState(updater: (current: ProgressStoreState) => ProgressStoreState): void {
   state = updater(state)
@@ -146,7 +159,7 @@ export function resetProgressStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
     try {
-      window.localStorage.removeItem(STORAGE_KEY)
+      window.localStorage.removeItem(scopedStorageKey(BASE_STORAGE_KEY))
     } catch {
       // ignore
     }

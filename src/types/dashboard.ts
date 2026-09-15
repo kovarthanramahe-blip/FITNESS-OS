@@ -67,7 +67,6 @@ export interface WeekActivityDay {
 }
 
 export interface DashboardData {
-  header: DashboardHeaderData
   dailyScore: DailyScoreData
   steps: StepsSummary
   weeklyActivity: WeekActivityDay[]

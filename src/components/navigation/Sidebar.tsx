@@ -1,11 +1,17 @@
 import { motion } from 'framer-motion'
 import { Zap } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { useDisplayIdentity } from '@/hooks/useDisplayIdentity'
+import { getGamificationStats, useGamificationStore } from '@/lib/gamificationStore'
 import { NAV_ITEMS } from '@/lib/navigation'
 import { cn } from '@/utils/cn'
 import { Avatar } from '@/components/ui/Avatar'
 
 export function Sidebar() {
+  const identity = useDisplayIdentity()
+  useGamificationStore()
+  const { profile, levelTitle } = getGamificationStats()
+
   return (
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-surface px-4 py-6 lg:flex">
       <div className="flex items-center gap-2 px-2">
@@ -51,10 +57,12 @@ export function Sidebar() {
       </nav>
 
       <div className="flex items-center gap-3 rounded-[var(--radius-md)] border border-border bg-surface-elevated px-3 py-3">
-        <Avatar name="Kovarthan Ramahe" size="sm" />
+        <Avatar name={identity.fullName} src={identity.avatarUrl} size="sm" />
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-text-primary">Kovarthan</p>
-          <p className="truncate text-xs text-text-muted">Level 7 · Intermediate</p>
+          <p className="truncate text-sm font-medium text-text-primary">{identity.name}</p>
+          <p className="truncate text-xs text-text-muted">
+            Level {profile.currentLevel} · {levelTitle}
+          </p>
         </div>
       </div>
     </aside>
