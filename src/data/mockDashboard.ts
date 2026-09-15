@@ -48,13 +48,6 @@ export const mockDashboardData: DashboardData = {
     steps: 7842,
     target: 10000,
   },
-  weight: {
-    currentKg: 72.4,
-    changeKg: -0.6,
-    changePeriodLabel: 'this month',
-    targetKg: 68,
-    trend: [73.6, 73.3, 73.0, 72.7, 72.5, 72.4],
-  },
   streak: {
     days: 14,
   },

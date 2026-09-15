@@ -18,7 +18,9 @@ import { LevelProgress } from '@/components/gamification/LevelProgress'
 import { mockDashboardData } from '@/data/mockDashboard'
 import { mockPersonalRecords } from '@/data/mockProgress'
 import { getProgramById } from '@/data/programs'
+import { useProgressStore } from '@/lib/progressStore'
 import { useWorkoutStore } from '@/lib/workoutStore'
+import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
 
 // Recharts is a heavy dependency — keep it out of the Dashboard's initial
@@ -37,6 +39,20 @@ export function Dashboard() {
   const program = selectedProgramId ? getProgramById(selectedProgramId) : undefined
   const programDay = program ? resolveProgramDay(program, currentDayIndex) : null
   const workoutSummary = getTodaysWorkoutSummary(programDay, activeSession)
+
+  const { weightLogs, weightGoal } = useProgressStore()
+  const currentWeightLog = getCurrentWeightLog(weightLogs)
+  const weightTrend = [...weightLogs]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .slice(-6)
+    .map((log) => log.weightKg)
+  const weight = {
+    currentKg: currentWeightLog?.weightKg ?? weightGoal.startingWeightKg,
+    changeKg: getWeightChangeOverDays(weightLogs, 30) ?? 0,
+    changePeriodLabel: 'last 30 days',
+    targetKg: weightGoal.targetWeightKg,
+    trend: weightTrend,
+  }
 
   return (
     <motion.div
@@ -88,7 +104,7 @@ export function Dashboard() {
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-4">
-        <WeightCard data={d.weight} />
+        <WeightCard data={weight} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-4">
         <StreakCard streak={d.streak} week={d.weeklyActivity} />

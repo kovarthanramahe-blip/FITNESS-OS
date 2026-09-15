@@ -46,6 +46,11 @@ export interface StepsSummary {
   target: number
 }
 
+/**
+ * Compact "current weight" summary shown on the dashboard. Computed live
+ * from the progress store (see src/lib/progressStore.ts) rather than stored
+ * here, since it reflects real weight-log entries.
+ */
 export interface WeightSummary {
   currentKg: number
   changeKg: number
@@ -87,7 +92,6 @@ export interface DashboardData {
   protein: NutrientSummary
   water: WaterSummary
   steps: StepsSummary
-  weight: WeightSummary
   streak: StreakSummary
   level: LevelSummary
   habits: DashboardHabit[]
