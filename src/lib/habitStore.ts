@@ -197,7 +197,12 @@ export function setWaterGoal(goal: Partial<WaterGoal>): void {
   setState((current) => ({ ...current, waterGoal: { ...current.waterGoal, ...goal } }))
 }
 
-/** Test-only: resets the module-level store to a clean initial state. */
+/**
+ * Wipes all habit/water data for the current scope back to its clean
+ * initial state (used by both tests and the production "Reset Fitness
+ * Data" setting) and notifies subscribers so any mounted UI updates
+ * immediately.
+ */
 export function resetHabitStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
@@ -207,4 +212,8 @@ export function resetHabitStoreForTests(): void {
       // ignore
     }
   }
+  for (const listener of listeners) listener()
 }
+
+/** Production-facing alias for the Settings "Reset Fitness Data" action. */
+export const resetHabitData = resetHabitStoreForTests

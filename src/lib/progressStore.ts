@@ -154,7 +154,11 @@ export function deleteMeasurement(id: string): void {
   }))
 }
 
-/** Test-only: resets the module-level store to a clean initial state. */
+/**
+ * Wipes all progress data for the current scope back to its clean initial
+ * state (used by both tests and the production "Reset Fitness Data"
+ * setting) and notifies subscribers so any mounted UI updates immediately.
+ */
 export function resetProgressStoreForTests(): void {
   state = createInitialState()
   if (typeof window !== 'undefined') {
@@ -164,4 +168,8 @@ export function resetProgressStoreForTests(): void {
       // ignore
     }
   }
+  for (const listener of listeners) listener()
 }
+
+/** Production-facing alias for the Settings "Reset Fitness Data" action. */
+export const resetProgressData = resetProgressStoreForTests

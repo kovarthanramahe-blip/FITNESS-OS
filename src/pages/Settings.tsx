@@ -1,17 +1,17 @@
 import { motion } from 'framer-motion'
-import { ChevronRight, Download, Moon, Watch } from 'lucide-react'
+import { ChevronRight, Moon, Target, Watch } from 'lucide-react'
 import { useState } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
 import { AccountSection } from '@/components/settings/AccountSection'
+import { DataPrivacySection } from '@/components/settings/DataPrivacySection'
 import { useToast } from '@/hooks/useToast'
 
 const settingsRows = [
   { id: 'goals', label: 'Goals', description: 'Target weight, calories & macros' },
   { id: 'devices', label: 'Connected Devices', description: 'Samsung Health, Galaxy Watch (coming soon)' },
-  { id: 'data', label: 'Data & Privacy', description: 'Export or delete your data' },
 ]
 
 export function Settings() {
@@ -90,7 +90,7 @@ export function Settings() {
           >
             <div className="flex items-center gap-3">
               <span className="flex size-10 items-center justify-center rounded-full bg-surface-elevated text-text-secondary">
-                {row.id === 'devices' ? <Watch className="size-5" /> : <Download className="size-5" />}
+                {row.id === 'devices' ? <Watch className="size-5" /> : <Target className="size-5" />}
               </span>
               <div>
                 <p className="text-sm font-medium text-text-primary">{row.label}</p>
@@ -100,6 +100,10 @@ export function Settings() {
             <ChevronRight className="size-4 text-text-muted" />
           </Card>
         ))}
+      </motion.div>
+
+      <motion.div variants={staggerItem}>
+        <DataPrivacySection />
       </motion.div>
     </motion.div>
   )
