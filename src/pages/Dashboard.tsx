@@ -26,6 +26,7 @@ import { useProgressStore } from '@/lib/progressStore'
 import { useWorkoutStore } from '@/lib/workoutStore'
 import type { NutrientSummary } from '@/types/dashboard'
 import { getTodayDateString } from '@/utils/dateRange'
+import { getWeeklyActivityFromHistory } from '@/utils/dashboard'
 import { getDailyTotals, goalToMacroTargets } from '@/utils/nutrition'
 import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
@@ -48,13 +49,14 @@ export function Dashboard() {
   const dailyScore = identity.isGuest ? d.dailyScore : { score: 0, max: d.dailyScore.max }
   const steps = identity.isGuest ? d.steps : { steps: 0, target: d.steps.target }
 
-  const { selectedProgramId, currentDayIndex, activeSession, personalRecords } = useWorkoutStore()
+  const { selectedProgramId, currentDayIndex, activeSession, personalRecords, history } = useWorkoutStore()
   const program = selectedProgramId ? getProgramById(selectedProgramId) : undefined
   const programDay = program ? resolveProgramDay(program, currentDayIndex) : null
   const workoutSummary = getTodaysWorkoutSummary(programDay, activeSession)
   const recentRecords = [...personalRecords]
     .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, RECENT_PR_COUNT)
+  const weeklyActivity = identity.isGuest ? d.weeklyActivity : getWeeklyActivityFromHistory(history)
 
   const { weightLogs, weightGoal } = useProgressStore()
   const currentWeightLog = getCurrentWeightLog(weightLogs)
@@ -161,7 +163,7 @@ export function Dashboard() {
             </Card>
           }
         >
-          <WeeklyActivityChart week={d.weeklyActivity} />
+          <WeeklyActivityChart week={weeklyActivity} />
         </Suspense>
       </motion.div>
 
