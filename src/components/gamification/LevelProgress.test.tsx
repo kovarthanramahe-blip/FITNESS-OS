@@ -12,12 +12,17 @@ describe('LevelProgress', () => {
     render(<LevelProgress level={12} xp={2840} xpToNextLevel={3000} />)
 
     expect(screen.getByText('Level 12')).toBeInTheDocument()
-    expect(screen.getByText('2,840 XP')).toBeInTheDocument()
+    expect(screen.getByText('2,840 / 3,000 XP')).toBeInTheDocument()
     expect(screen.getByText('160 XP to next level')).toBeInTheDocument()
   })
 
   it('exposes the progress via the progressbar role', () => {
     render(<LevelProgress level={1} xp={50} xpToNextLevel={100} />)
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50')
+  })
+
+  it('shows the level title when provided', () => {
+    render(<LevelProgress level={12} xp={2840} xpToNextLevel={3000} title="Consistency Builder" />)
+    expect(screen.getByText('Consistency Builder')).toBeInTheDocument()
   })
 })

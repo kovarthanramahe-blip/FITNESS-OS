@@ -23,13 +23,5 @@ export const mockDashboardData: DashboardData = {
     steps: 7842,
     target: 10000,
   },
-  streak: {
-    days: 14,
-  },
-  level: {
-    level: 12,
-    xp: 2840,
-    xpToNextLevel: 3000,
-  },
   weeklyActivity,
 }

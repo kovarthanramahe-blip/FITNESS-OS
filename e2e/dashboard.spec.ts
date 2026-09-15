@@ -10,7 +10,7 @@ test.describe('Dashboard', () => {
     await expect(page.getByText('Daily Habits')).toBeVisible()
     await expect(page.getByText('Level Progress')).toBeVisible()
     await expect(page.getByText('Current Weight')).toBeVisible()
-    await expect(page.getByText(/day streak/)).toBeVisible()
+    await expect(page.getByText('Streaks')).toBeVisible()
     await expect(page.getByText('Recent Personal Records')).toBeVisible()
     await expect(page.getByText('Weekly Activity')).toBeVisible()
   })

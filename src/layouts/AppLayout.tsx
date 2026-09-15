@@ -1,11 +1,41 @@
 import { AnimatePresence, motion } from 'framer-motion'
+import { useCallback, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Outlet, useLocation } from 'react-router-dom'
 import { BottomNavigation } from '@/components/navigation/BottomNavigation'
 import { Sidebar } from '@/components/navigation/Sidebar'
+import { BadgeUnlockToast } from '@/components/gamification/BadgeUnlockToast'
 import { pageTransition } from '@/animations/variants'
+import { useGamificationSync } from '@/hooks/useGamificationSync'
+import type { Badge } from '@/types/gamification'
+
+const BADGE_TOAST_DURATION_MS = 5000
+
+interface QueuedBadge {
+  toastId: string
+  badge: Badge
+}
 
 export function AppLayout() {
   const location = useLocation()
+  const [unlockedBadges, setUnlockedBadges] = useState<QueuedBadge[]>([])
+
+  const dismissBadgeToast = useCallback((toastId: string) => {
+    setUnlockedBadges((current) => current.filter((item) => item.toastId !== toastId))
+  }, [])
+
+  const handleBadgesUnlocked = useCallback(
+    (badges: Badge[]) => {
+      const queued = badges.map((badge) => ({ toastId: crypto.randomUUID(), badge }))
+      setUnlockedBadges((current) => [...current, ...queued])
+      for (const item of queued) {
+        window.setTimeout(() => dismissBadgeToast(item.toastId), BADGE_TOAST_DURATION_MS)
+      }
+    },
+    [dismissBadgeToast],
+  )
+
+  useGamificationSync(handleBadgesUnlocked)
 
   return (
     <div className="min-h-screen bg-bg">
@@ -26,6 +56,16 @@ export function AppLayout() {
         </main>
       </div>
       <BottomNavigation />
+      {createPortal(
+        <div className="pointer-events-none fixed bottom-20 left-1/2 z-[100] flex w-full max-w-sm -translate-x-1/2 flex-col gap-2 px-4 sm:bottom-6">
+          <AnimatePresence>
+            {unlockedBadges.map((item) => (
+              <BadgeUnlockToast key={item.toastId} badge={item.badge} onDismiss={() => dismissBadgeToast(item.toastId)} />
+            ))}
+          </AnimatePresence>
+        </div>,
+        document.body,
+      )}
     </div>
   )
 }

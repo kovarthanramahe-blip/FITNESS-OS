@@ -9,14 +9,16 @@ export interface LevelProgressProps {
   level: number
   xp: number
   xpToNextLevel: number
+  /** Named tier for this level, e.g. "Consistency Builder" — omitted keeps the compact dashboard layout. */
+  title?: string
   className?: string
 }
 
 /**
- * Reusable level/XP summary — used on the dashboard today and intended for
- * the Achievements/gamification screens later.
+ * Reusable level/XP summary — used on the dashboard and the Achievements
+ * page's gamification overview.
  */
-export function LevelProgress({ level, xp, xpToNextLevel, className }: LevelProgressProps) {
+export function LevelProgress({ level, xp, xpToNextLevel, title, className }: LevelProgressProps) {
   const animatedXp = useCountUp(xp)
   const remaining = Math.max(xpToNextLevel - xp, 0)
 
@@ -28,11 +30,14 @@ export function LevelProgress({ level, xp, xpToNextLevel, className }: LevelProg
           <Zap className="size-4" strokeWidth={2.25} />
         </span>
       </div>
-      <p className="font-display text-2xl font-bold text-text-primary">
-        <span>Level {level}</span>
-        <span className="ml-2 text-sm font-normal tabular-nums text-text-muted">
-          {formatNumber(Math.round(animatedXp))} XP
-        </span>
+      <div>
+        <p data-testid="level-heading" className="font-display text-2xl font-bold text-text-primary">
+          Level {level}
+        </p>
+        {title && <p className="text-sm text-text-secondary">{title}</p>}
+      </div>
+      <p className="text-sm font-medium tabular-nums text-text-primary">
+        {`${formatNumber(Math.round(animatedXp))} / ${formatNumber(xpToNextLevel)} XP`}
       </p>
       <ProgressBar value={xp} max={xpToNextLevel} color="purple" size="sm" />
       <p className="text-xs text-text-muted">{formatNumber(remaining)} XP to next level</p>

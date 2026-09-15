@@ -2,22 +2,24 @@ import { motion } from 'framer-motion'
 import { Beef, Moon, Sparkles, UtensilsCrossed } from 'lucide-react'
 import { lazy, Suspense } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
+import { ChallengeCard } from '@/components/gamification/ChallengeCard'
+import { StreakSummary } from '@/components/gamification/StreakSummary'
+import { XPProgressCard } from '@/components/gamification/XPProgressCard'
 import { DailyScoreCard } from '@/components/dashboard/DailyScoreCard'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { HabitsCard } from '@/components/dashboard/HabitsCard'
 import { NutrientProgressCard } from '@/components/dashboard/NutrientProgressCard'
 import { PersonalRecordsCard } from '@/components/dashboard/PersonalRecordsCard'
 import { StepsCard } from '@/components/dashboard/StepsCard'
-import { StreakCard } from '@/components/dashboard/StreakCard'
 import { TodaysWorkoutCard } from '@/components/dashboard/TodaysWorkoutCard'
 import { WaterCard } from '@/components/dashboard/WaterCard'
 import { WeightCard } from '@/components/dashboard/WeightCard'
 import { Card } from '@/components/ui/Card'
 import { Skeleton } from '@/components/ui/LoadingState'
-import { LevelProgress } from '@/components/gamification/LevelProgress'
 import { mockDashboardData } from '@/data/mockDashboard'
 import { mockPersonalRecords } from '@/data/mockProgress'
 import { getProgramById } from '@/data/programs'
+import { getGamificationStats, useGamificationStore } from '@/lib/gamificationStore'
 import { useHabitStore } from '@/lib/habitStore'
 import { useNutritionStore } from '@/lib/nutritionStore'
 import { useProgressStore } from '@/lib/progressStore'
@@ -69,6 +71,15 @@ export function Dashboard() {
   const protein: NutrientSummary = { label: 'Protein', unit: 'g', consumed: dailyTotals.protein, target: macroTargets.protein }
 
   const { habits, entries: habitEntries, waterLogs, waterGoal } = useHabitStore()
+
+  // Re-renders whenever the gamification store changes (new XP/badges from
+  // useGamificationSync, mounted once in AppLayout); stats are always
+  // recomputed fresh from live store data, never a separate dataset.
+  useGamificationStore()
+  const gamificationStats = getGamificationStats()
+  const featuredChallenge =
+    gamificationStats.dailyChallenges.find((progress) => progress.challenge.id === 'daily-workout') ??
+    gamificationStats.dailyChallenges[0]
 
   return (
     <motion.div
@@ -123,10 +134,10 @@ export function Dashboard() {
         <WeightCard data={weight} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-4">
-        <StreakCard streak={d.streak} week={d.weeklyActivity} />
+        <XPProgressCard stats={gamificationStats} />
       </motion.div>
       <motion.div variants={staggerItem} className="lg:col-span-4">
-        <LevelProgress level={d.level.level} xp={d.level.xp} xpToNextLevel={d.level.xpToNextLevel} />
+        <StreakSummary streaks={gamificationStats.streaks} />
       </motion.div>
 
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-5">
@@ -148,6 +159,12 @@ export function Dashboard() {
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-12">
         <PersonalRecordsCard records={recentRecords} />
       </motion.div>
+
+      {featuredChallenge && (
+        <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-12">
+          <ChallengeCard progress={featuredChallenge} />
+        </motion.div>
+      )}
     </motion.div>
   )
 }

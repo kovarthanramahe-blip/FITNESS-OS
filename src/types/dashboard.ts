@@ -66,21 +66,9 @@ export interface WeekActivityDay {
   caloriesBurned: number
 }
 
-export interface StreakSummary {
-  days: number
-}
-
-export interface LevelSummary {
-  level: number
-  xp: number
-  xpToNextLevel: number
-}
-
 export interface DashboardData {
   header: DashboardHeaderData
   dailyScore: DailyScoreData
   steps: StepsSummary
-  streak: StreakSummary
-  level: LevelSummary
   weeklyActivity: WeekActivityDay[]
 }
