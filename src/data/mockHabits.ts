@@ -1,0 +1,55 @@
+import { Dumbbell, Droplets, Footprints, Moon, Pill } from 'lucide-react'
+import type { Habit } from '@/types/habits'
+
+export const mockHabits: Habit[] = [
+  {
+    id: 'water',
+    name: 'Drink 3L water',
+    icon: Droplets,
+    color: 'secondary',
+    streak: 12,
+    completedToday: false,
+    targetPerWeek: 7,
+    completionsThisWeek: 5,
+  },
+  {
+    id: 'workout',
+    name: 'Complete workout',
+    icon: Dumbbell,
+    color: 'accent',
+    streak: 12,
+    completedToday: false,
+    targetPerWeek: 5,
+    completionsThisWeek: 3,
+  },
+  {
+    id: 'steps',
+    name: 'Hit 10,000 steps',
+    icon: Footprints,
+    color: 'purple',
+    streak: 4,
+    completedToday: false,
+    targetPerWeek: 7,
+    completionsThisWeek: 4,
+  },
+  {
+    id: 'supplement',
+    name: 'Take multivitamin',
+    icon: Pill,
+    color: 'success',
+    streak: 20,
+    completedToday: true,
+    targetPerWeek: 7,
+    completionsThisWeek: 7,
+  },
+  {
+    id: 'sleep',
+    name: 'Sleep 7+ hours',
+    icon: Moon,
+    color: 'warning',
+    streak: 6,
+    completedToday: true,
+    targetPerWeek: 7,
+    completionsThisWeek: 6,
+  },
+]
