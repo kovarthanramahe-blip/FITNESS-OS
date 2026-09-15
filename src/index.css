@@ -128,6 +128,20 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /*
+   * The default focus outline is accent-colored, which disappears against
+   * accent-colored surfaces (e.g. the primary button). This gives those
+   * elements a two-tone ring instead: a background-colored gap so the ring
+   * separates from the element, then an accent ring so it still shows up
+   * against the page background.
+   */
+  .focus-ring-on-accent:focus-visible {
+    outline: none;
+    box-shadow:
+      0 0 0 2px var(--color-bg),
+      0 0 0 4px var(--color-accent);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -20,6 +20,14 @@ export function formatWeight(value: number, unit: 'kg' | 'lb' = 'kg'): string {
   return `${value % 1 === 0 ? value : value.toFixed(1)} ${unit}`
 }
 
+export function formatFriendlyDate(date: Date): string {
+  return new Intl.DateTimeFormat('en-US', {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+  }).format(date)
+}
+
 export function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`
   const hours = Math.floor(minutes / 60)

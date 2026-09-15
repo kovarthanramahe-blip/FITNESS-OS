@@ -2,8 +2,7 @@ import { cn } from '@/utils/cn'
 import type { ButtonSize, ButtonVariant } from './Button'
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary:
-    'bg-accent text-text-inverse hover:bg-accent-strong shadow-[var(--shadow-card)] focus-visible:outline-accent',
+  primary: 'bg-accent text-text-inverse hover:bg-accent-strong shadow-[var(--shadow-card)] focus-ring-on-accent',
   secondary:
     'bg-surface-elevated text-text-primary border border-border hover:border-border-strong',
   outline: 'bg-transparent text-text-primary border border-border hover:bg-surface',

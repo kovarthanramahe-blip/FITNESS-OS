@@ -6,11 +6,12 @@ import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Ca
 import { ProgressBar } from '@/components/ui/ProgressBar'
 import { ProgressRing } from '@/components/ui/ProgressRing'
 import { mockAchievements, mockChallenges } from '@/data/mockAchievements'
-import { mockDashboard } from '@/data/mockDashboard'
+import { mockDashboardData } from '@/data/mockDashboard'
 import { cn } from '@/utils/cn'
 
 export function Achievements() {
-  const { level, xp, xpToNextLevel, streakDays } = mockDashboard
+  const { level, xp, xpToNextLevel } = mockDashboardData.level
+  const streakDays = mockDashboardData.streak.days
   const unlockedCount = mockAchievements.filter((achievement) => achievement.unlocked).length
 
   return (

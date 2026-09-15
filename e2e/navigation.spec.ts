@@ -3,7 +3,7 @@ import { expect, test } from '@playwright/test'
 test.describe('Fitness OS navigation', () => {
   test('loads the dashboard by default', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByRole('heading', { name: "Let's make today count" })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Kovarthan/ })).toBeVisible()
   })
 
   test('navigates to every primary section', async ({ page }) => {
