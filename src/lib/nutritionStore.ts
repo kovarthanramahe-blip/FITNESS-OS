@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { mockFoodEntries, mockNutritionGoal } from '@/data/mockFoodEntries'
+import { pushFoodEntry, pushFoodEntryDelete, pushNutritionGoal } from '@/lib/cloudSync/push'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { FoodEntry, MacroTotals, MealType, NutritionGoal } from '@/types/nutrition'
 import { getDailyTotals, getEntriesForDate } from '@/utils/nutrition'
@@ -104,10 +105,9 @@ export interface FoodEntryInput {
 }
 
 export function addFoodEntry(input: FoodEntryInput): void {
-  setState((current) => ({
-    ...current,
-    entries: [...current.entries, { id: nextId('food'), createdAt: new Date().toISOString(), ...input }],
-  }))
+  const newEntry: FoodEntry = { id: nextId('food'), createdAt: new Date().toISOString(), ...input }
+  setState((current) => ({ ...current, entries: [...current.entries, newEntry] }))
+  void pushFoodEntry(newEntry)
 }
 
 export function editFoodEntry(id: string, patch: Partial<FoodEntryInput>): void {
@@ -115,6 +115,8 @@ export function editFoodEntry(id: string, patch: Partial<FoodEntryInput>): void 
     ...current,
     entries: current.entries.map((entry) => (entry.id === id ? { ...entry, ...patch } : entry)),
   }))
+  const updated = state.entries.find((entry) => entry.id === id)
+  if (updated) void pushFoodEntry(updated)
 }
 
 export function deleteFoodEntry(id: string): void {
@@ -122,13 +124,16 @@ export function deleteFoodEntry(id: string): void {
     ...current,
     entries: current.entries.filter((entry) => entry.id !== id),
   }))
+  void pushFoodEntryDelete(id)
 }
 
 export function clearDailyEntries(date: string): void {
+  const removedIds = state.entries.filter((entry) => entry.date === date).map((entry) => entry.id)
   setState((current) => ({
     ...current,
     entries: current.entries.filter((entry) => entry.date !== date),
   }))
+  for (const id of removedIds) void pushFoodEntryDelete(id)
 }
 
 /** Entries logged for a given date — a thin, always-current view over `entries`. */
@@ -147,10 +152,35 @@ export function getDailyTotalsFromStore(date: string): MacroTotals {
 
 export function setNutritionGoals(goal: Partial<NutritionGoal>): void {
   setState((current) => ({ ...current, goal: { ...current.goal, ...goal } }))
+  void pushNutritionGoal(state.goal)
 }
 
 export function getNutritionGoals(): NutritionGoal {
   return state.goal
+}
+
+export interface NutritionCloudSnapshot {
+  entries: FoodEntry[]
+  goal: NutritionGoal | null
+}
+
+/**
+ * Merges a cloud snapshot (pulled on sign-in) into local state: cloud
+ * entries win on a shared id, any local-only entry is kept, and a null
+ * cloud goal means "nothing to pull yet." Returns what still needs
+ * pushing so a fresh sign-in on this device reconciles both directions.
+ */
+export function mergeNutritionFromCloud(cloud: NutritionCloudSnapshot): { localOnlyEntries: FoodEntry[]; goalToPush: NutritionGoal | null } {
+  const cloudEntryIds = new Set(cloud.entries.map((entry) => entry.id))
+  const localOnlyEntries = state.entries.filter((entry) => !cloudEntryIds.has(entry.id))
+  const goalToPush = cloud.goal ? null : state.goal
+
+  setState((current) => ({
+    entries: [...localOnlyEntries, ...cloud.entries],
+    goal: cloud.goal ?? current.goal,
+  }))
+
+  return { localOnlyEntries, goalToPush }
 }
 
 /**

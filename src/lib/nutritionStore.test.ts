@@ -9,6 +9,7 @@ import {
   getEntriesForDateFromStore,
   getNutritionGoals,
   getNutritionState,
+  mergeNutritionFromCloud,
   resetNutritionStoreForTests,
   setNutritionGoals,
 } from './nutritionStore'
@@ -152,5 +153,50 @@ describe('authenticated zero-state', () => {
 
     setCurrentUserId('user-2')
     expect(getNutritionState().entries).toEqual([])
+  })
+})
+
+describe('mergeNutritionFromCloud', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-merge-test')
+    resetNutritionStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('unions cloud and local-only entries, keeping both, and returns the local-only ones', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const localOnlyId = getNutritionState().entries[0]!.id
+    const cloudEntry = { ...SAMPLE_ENTRY, id: 'cloud-1', createdAt: '2024-06-01T00:00:00.000Z' }
+
+    const { localOnlyEntries } = mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+
+    expect(localOnlyEntries.map((e) => e.id)).toEqual([localOnlyId])
+    expect(getNutritionState().entries.map((e) => e.id).sort()).toEqual([localOnlyId, 'cloud-1'].sort())
+  })
+
+  it('cloud wins on a shared id — never a duplicate entry', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const sharedId = getNutritionState().entries[0]!.id
+    const cloudVersion = { ...SAMPLE_ENTRY, id: sharedId, calories: 999, createdAt: '2024-06-01T00:00:00.000Z' }
+
+    mergeNutritionFromCloud({ entries: [cloudVersion], goal: null })
+
+    const entries = getNutritionState().entries
+    expect(entries).toHaveLength(1)
+    expect(entries[0]?.calories).toBe(999)
+  })
+
+  it('a null cloud goal keeps the local goal and reports it for push-back', () => {
+    const { goalToPush } = mergeNutritionFromCloud({ entries: [], goal: null })
+    expect(goalToPush).toEqual(getNutritionState().goal)
+  })
+
+  it('a present cloud goal replaces the local goal', () => {
+    const cloudGoal = { dailyCalories: 2500, proteinGrams: 180, carbohydrateGrams: 250, fatGrams: 80 }
+    mergeNutritionFromCloud({ entries: [], goal: cloudGoal })
+    expect(getNutritionState().goal).toEqual(cloudGoal)
   })
 })

@@ -9,6 +9,7 @@ import {
   getHabitHistory,
   getHabitState,
   getHabitsForDate,
+  mergeHabitFromCloud,
   removeLatestWaterLog,
   resetHabitStoreForTests,
   setWaterGoal,
@@ -222,5 +223,69 @@ describe('authenticated zero-state', () => {
 
     setCurrentUserId('user-2')
     expect(getHabitState().habits).toEqual([])
+  })
+})
+
+describe('mergeHabitFromCloud', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-merge-test')
+    resetHabitStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('unions cloud and local-only habits, keeping both', () => {
+    addHabit(SAMPLE_HABIT)
+    const localOnlyId = getHabitState().habits[0]!.id
+    const cloudHabit = { ...SAMPLE_HABIT, id: 'cloud-habit-1', createdAt: '2024-06-01T00:00:00.000Z' }
+
+    const { localOnlyHabits } = mergeHabitFromCloud({ habits: [cloudHabit], entries: [], waterLogs: [], waterGoal: null })
+
+    expect(localOnlyHabits.map((h) => h.id)).toEqual([localOnlyId])
+    expect(getHabitState().habits.map((h) => h.id).sort()).toEqual([localOnlyId, 'cloud-habit-1'].sort())
+  })
+
+  it('cloud wins on a shared habit id', () => {
+    addHabit(SAMPLE_HABIT)
+    const sharedId = getHabitState().habits[0]!.id
+    const cloudVersion = { ...SAMPLE_HABIT, id: sharedId, name: 'Renamed elsewhere', createdAt: '2024-06-01T00:00:00.000Z' }
+
+    mergeHabitFromCloud({ habits: [cloudVersion], entries: [], waterLogs: [], waterGoal: null })
+
+    expect(getHabitState().habits).toHaveLength(1)
+    expect(getHabitState().habits[0]?.name).toBe('Renamed elsewhere')
+  })
+
+  it('pairs a local-only entry with its owning habit for push-back', () => {
+    addHabit(SAMPLE_HABIT)
+    const habit = getHabitState().habits[0]!
+    completeHabit(habit.id, '2024-06-01')
+    const localEntry = getHabitState().entries[0]!
+
+    const { localOnlyEntries } = mergeHabitFromCloud({
+      habits: [habit],
+      entries: [],
+      waterLogs: [],
+      waterGoal: null,
+    })
+
+    expect(localOnlyEntries).toEqual([{ entry: localEntry, habit }])
+  })
+
+  it('cloud wins on a shared water log id', () => {
+    addWaterLog(250, '2024-06-01')
+    const sharedId = getHabitState().waterLogs[0]!.id
+    const cloudLog = { id: sharedId, date: '2024-06-01', amountMl: 500, createdAt: '2024-06-01T00:00:00.000Z' }
+
+    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudLog], waterGoal: null })
+
+    expect(getHabitState().waterLogs).toEqual([cloudLog])
+  })
+
+  it('a null cloud water goal keeps the local one and reports it for push-back', () => {
+    const { waterGoalToPush } = mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [], waterGoal: null })
+    expect(waterGoalToPush).toEqual(getHabitState().waterGoal)
   })
 })

@@ -6,6 +6,7 @@ import { BottomNavigation } from '@/components/navigation/BottomNavigation'
 import { Sidebar } from '@/components/navigation/Sidebar'
 import { BadgeUnlockToast } from '@/components/gamification/BadgeUnlockToast'
 import { pageTransition } from '@/animations/variants'
+import { useCloudSync } from '@/lib/cloudSync'
 import { useGamificationSync } from '@/hooks/useGamificationSync'
 import type { Badge } from '@/types/gamification'
 
@@ -35,6 +36,7 @@ export function AppLayout() {
     [dismissBadgeToast],
   )
 
+  useCloudSync()
   useGamificationSync(handleBadgesUnlocked)
 
   return (

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { mockCompletedSessions, mockWorkoutHistory, seedPersonalRecords } from '@/data/mockWorkoutHistory'
+import { pushCompletedSession, pushPersonalRecord } from '@/lib/cloudSync/push'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { PersonalRecord } from '@/types/progress'
 import type {
@@ -205,6 +206,8 @@ export function updateSet(
   setId: string,
   patch: Partial<Pick<WorkoutSet, 'weightKg' | 'reps' | 'completed' | 'setType' | 'notes'>>,
 ): void {
+  let createdRecord: PersonalRecord | null = null
+
   setState((current) => {
     if (!current.activeSession) return current
 
@@ -263,6 +266,7 @@ export function updateSet(
       xpAwarded: PR_XP_AWARD,
     }
 
+    createdRecord = newRecord
     return {
       ...current,
       activeSession,
@@ -271,6 +275,8 @@ export function updateSet(
       celebration,
     }
   })
+
+  if (createdRecord) void pushPersonalRecord(createdRecord)
 }
 
 export function addSet(exerciseId: string): void {
@@ -307,30 +313,26 @@ export function removeSet(exerciseId: string, setId: string): void {
 }
 
 export function completeSession(): SessionSummary | null {
-  let summary: SessionSummary | null = null
+  if (!state.activeSession) return null
 
-  setState((current) => {
-    if (!current.activeSession) return current
+  const completedSession: WorkoutSession = {
+    ...state.activeSession,
+    completedAt: new Date().toISOString(),
+  }
+  const newPersonalRecords = state.personalRecords.filter((record) => state.activeSessionPrIds.includes(record.id))
+  const historyEntry = buildHistoryEntry(completedSession, newPersonalRecords.length)
+  const summary: SessionSummary = { historyEntry, newPersonalRecords }
 
-    const completedSession: WorkoutSession = {
-      ...current.activeSession,
-      completedAt: new Date().toISOString(),
-    }
-    const newPersonalRecords = current.personalRecords.filter((record) =>
-      current.activeSessionPrIds.includes(record.id),
-    )
-    const historyEntry = buildHistoryEntry(completedSession, newPersonalRecords.length)
-    summary = { historyEntry, newPersonalRecords }
+  setState((current) => ({
+    ...current,
+    activeSession: null,
+    activeSessionPrIds: [],
+    history: [historyEntry, ...current.history],
+    currentDayIndex: current.currentDayIndex + 1,
+    lastCompletedSummary: summary,
+  }))
 
-    return {
-      ...current,
-      activeSession: null,
-      activeSessionPrIds: [],
-      history: [historyEntry, ...current.history],
-      currentDayIndex: current.currentDayIndex + 1,
-      lastCompletedSummary: summary,
-    }
-  })
+  void pushCompletedSession(completedSession, historyEntry)
 
   return summary
 }
@@ -358,6 +360,35 @@ export function deleteCustomWorkout(workoutId: string): void {
     ...current,
     customWorkouts: current.customWorkouts.filter((workout) => workout.id !== workoutId),
   }))
+}
+
+export interface WorkoutCloudSnapshot {
+  history: WorkoutHistoryEntry[]
+  personalRecords: PersonalRecord[]
+}
+
+/**
+ * Merges a cloud snapshot (pulled on sign-in) into local state: cloud
+ * items win on a shared id, any local-only item is kept. History entries
+ * are matched by `sessionId` (the deterministic client id — see
+ * mapWorkoutSessionRow) rather than `id`, since the cloud copy's `id` is
+ * the server-generated row id. Only personal records are returned for
+ * push-back: a `WorkoutHistoryEntry` is a summary with no exercises/sets,
+ * so a local-only history entry from before cloud sync existed has no
+ * full session detail left to reconstruct and push.
+ */
+export function mergeWorkoutFromCloud(cloud: WorkoutCloudSnapshot): { localOnlyPersonalRecords: PersonalRecord[] } {
+  const cloudSessionIds = new Set(cloud.history.map((entry) => entry.sessionId))
+  const localOnlyHistory = state.history.filter((entry) => !cloudSessionIds.has(entry.sessionId))
+  const mergedHistory = [...localOnlyHistory, ...cloud.history].sort((a, b) => b.date.localeCompare(a.date))
+
+  const cloudRecordIds = new Set(cloud.personalRecords.map((record) => record.id))
+  const localOnlyPersonalRecords = state.personalRecords.filter((record) => !cloudRecordIds.has(record.id))
+  const mergedPersonalRecords = [...localOnlyPersonalRecords, ...cloud.personalRecords]
+
+  setState((current) => ({ ...current, history: mergedHistory, personalRecords: mergedPersonalRecords }))
+
+  return { localOnlyPersonalRecords }
 }
 
 /**

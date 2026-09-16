@@ -6,6 +6,7 @@ import {
   deleteMeasurement,
   deleteWeightLog,
   getProgressState,
+  mergeProgressFromCloud,
   resetProgressStoreForTests,
   setWeightGoal,
   updateMeasurement,
@@ -113,5 +114,68 @@ describe('authenticated zero-state', () => {
 
     setCurrentUserId('user-2')
     expect(getProgressState().weightLogs).toEqual([])
+  })
+})
+
+describe('mergeProgressFromCloud', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-merge-test')
+    resetProgressStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('unions cloud and local-only weight logs, keeping both', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    const localOnlyId = getProgressState().weightLogs[0]!.id
+
+    const { localOnlyWeightLogs } = mergeProgressFromCloud({
+      weightLogs: [{ id: 'cloud-1', date: '2024-06-02', weightKg: 79 }],
+      weightGoal: null,
+      measurements: [],
+    })
+
+    expect(localOnlyWeightLogs.map((l) => l.id)).toEqual([localOnlyId])
+    const ids = getProgressState().weightLogs.map((l) => l.id).sort()
+    expect(ids).toEqual([localOnlyId, 'cloud-1'].sort())
+  })
+
+  it('cloud wins when the same id exists on both sides — never a duplicate row', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    const sharedId = getProgressState().weightLogs[0]!.id
+
+    mergeProgressFromCloud({
+      weightLogs: [{ id: sharedId, date: '2024-06-01', weightKg: 81, note: 'synced elsewhere' }],
+      weightGoal: null,
+      measurements: [],
+    })
+
+    const logs = getProgressState().weightLogs
+    expect(logs).toHaveLength(1)
+    expect(logs[0]).toEqual({ id: sharedId, date: '2024-06-01', weightKg: 81, note: 'synced elsewhere' })
+  })
+
+  it('a null cloud goal leaves the local goal in place and reports it for push-back when non-default', () => {
+    setWeightGoal({ startingWeightKg: 90, targetWeightKg: 80, startDate: '2024-01-01' })
+
+    const { weightGoalToPush } = mergeProgressFromCloud({ weightLogs: [], weightGoal: null, measurements: [] })
+
+    expect(weightGoalToPush).toEqual(getProgressState().weightGoal)
+  })
+
+  it('does not push back a still-default zero weight goal', () => {
+    const { weightGoalToPush } = mergeProgressFromCloud({ weightLogs: [], weightGoal: null, measurements: [] })
+    expect(weightGoalToPush).toBeNull()
+  })
+
+  it('a present cloud goal replaces the local goal', () => {
+    setWeightGoal({ startingWeightKg: 90, targetWeightKg: 80, startDate: '2024-01-01' })
+    const cloudGoal = { startingWeightKg: 88, targetWeightKg: 75, startDate: '2024-02-01' }
+
+    mergeProgressFromCloud({ weightLogs: [], weightGoal: cloudGoal, measurements: [] })
+
+    expect(getProgressState().weightGoal).toEqual(cloudGoal)
   })
 })

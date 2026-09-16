@@ -7,6 +7,7 @@ import {
   discardSession,
   getCompletedSessionsMostRecentFirst,
   getWorkoutState,
+  mergeWorkoutFromCloud,
   resetWorkoutStoreForTests,
   saveCustomWorkout,
   selectProgram,
@@ -206,5 +207,66 @@ describe('authenticated zero-state', () => {
 
     setCurrentUserId('user-2')
     expect(getWorkoutState().history).toEqual([])
+  })
+})
+
+describe('mergeWorkoutFromCloud', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-merge-test')
+    resetWorkoutStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('unions cloud and local-only history entries, matched by sessionId not row id', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    completeSession()
+    const localEntry = getWorkoutState().history[0]!
+    const cloudEntry = {
+      id: 'server-row-id',
+      sessionId: 'cloud-session-1',
+      date: '2024-06-02',
+      name: 'Cloud Session',
+      durationMinutes: 40,
+      volumeKg: 500,
+      exerciseCount: 3,
+      setCount: 9,
+      personalRecordCount: 0,
+      estimatedCalories: 300,
+    }
+
+    mergeWorkoutFromCloud({ history: [cloudEntry], personalRecords: [] })
+
+    const sessionIds = getWorkoutState().history.map((entry) => entry.sessionId).sort()
+    expect(sessionIds).toEqual([localEntry.sessionId, 'cloud-session-1'].sort())
+  })
+
+  it('cloud wins when a history entry shares a sessionId with a local one', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    completeSession()
+    const localEntry = getWorkoutState().history[0]!
+    const cloudVersion = { ...localEntry, id: 'server-row-id', name: 'Synced name' }
+
+    mergeWorkoutFromCloud({ history: [cloudVersion], personalRecords: [] })
+
+    expect(getWorkoutState().history).toHaveLength(1)
+    expect(getWorkoutState().history[0]?.name).toBe('Synced name')
+  })
+
+  it('returns local-only personal records for push-back, and cloud wins on a shared id', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+
+    const localRecord = getWorkoutState().personalRecords[0]!
+    const { localOnlyPersonalRecords } = mergeWorkoutFromCloud({ history: [], personalRecords: [] })
+    expect(localOnlyPersonalRecords).toEqual([localRecord])
+
+    const cloudVersion = { ...localRecord, weightKg: 70 }
+    mergeWorkoutFromCloud({ history: [], personalRecords: [cloudVersion] })
+    expect(getWorkoutState().personalRecords).toEqual([cloudVersion])
   })
 })

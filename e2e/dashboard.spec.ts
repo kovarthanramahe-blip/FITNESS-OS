@@ -4,7 +4,7 @@ test.describe('Dashboard', () => {
   test('loads successfully with its major sections', async ({ page }) => {
     await page.goto('/')
 
-    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Kovarthan/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Good (morning|afternoon|evening), Guest/ })).toBeVisible()
     await expect(page.getByText("Today's Workout")).toBeVisible()
     await expect(page.getByText('Daily Fitness Score')).toBeVisible()
     await expect(page.getByText('Daily Habits')).toBeVisible()

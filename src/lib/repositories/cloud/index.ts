@@ -1,12 +1,22 @@
 import { supabase } from '@/lib/supabase'
 import type { ChallengeCompletionRow } from '@/types/supabase'
+import type { EarnedBadge, XPEvent } from '@/types/gamification'
+import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
+import type { FoodEntry, NutritionGoal } from '@/types/nutrition'
+import type { BodyMeasurement, PersonalRecord, WeightGoal, WeightLog } from '@/types/progress'
+import type { WorkoutHistoryEntry, WorkoutSession } from '@/types/workout'
 import type {
   GamificationRepository,
+  GamificationRepositoryWriter,
   HabitRepository,
+  HabitRepositoryWriter,
   NutritionRepository,
+  NutritionRepositoryWriter,
   ProgressRepository,
+  ProgressRepositoryWriter,
   Repositories,
   WorkoutRepository,
+  WorkoutRepositoryWriter,
 } from '@/lib/repositories/types'
 import {
   mapEarnedBadgeRow,
@@ -22,6 +32,22 @@ import {
   mapWeightLogRow,
   mapWorkoutSessionRow,
   mapXpEventRow,
+  toChallengeCompletionRow,
+  toEarnedBadgeRow,
+  toFoodEntryRow,
+  toHabitEntryRow,
+  toHabitRow,
+  toMeasurementRow,
+  toNutritionGoalRow,
+  toPersonalRecordRow,
+  toWaterGoalRow,
+  toWaterLogRow,
+  toWeightGoalRow,
+  toWeightLogRow,
+  toWorkoutExerciseRow,
+  toWorkoutSessionRow,
+  toWorkoutSetRow,
+  toXpEventRow,
 } from '@/lib/repositories/cloud/mappers'
 
 function client() {
@@ -32,15 +58,14 @@ function client() {
 }
 
 /**
- * Real Supabase-backed reads, one per domain, against the schema in
- * supabase/migrations/. These are wired up but not yet used by any page —
- * per Phase 7's local-first, no-risky-migration mandate, existing pages
- * keep reading from the local stores until Phase 8 introduces the actual
- * sync flow. `getRepositories()` (see ../index.ts) is where that switch
- * will happen.
+ * Real Supabase-backed reads and (Part 5) writes, one per domain, against
+ * the schema in supabase/migrations/. Every read/write below is scoped by
+ * an explicit `.eq('user_id', userId)` as defense-in-depth alongside RLS —
+ * `userId` always comes from the authenticated session (see
+ * src/lib/cloudSync), never from anything client-editable.
  */
 
-export function createCloudWorkoutRepository(userId: string): WorkoutRepository {
+export function createCloudWorkoutRepository(userId: string): WorkoutRepository & WorkoutRepositoryWriter {
   return {
     async getHistory() {
       const { data, error } = await client()
@@ -56,10 +81,58 @@ export function createCloudWorkoutRepository(userId: string): WorkoutRepository 
       if (error) throw error
       return (data ?? []).map(mapPersonalRecordRow)
     },
+    async saveCompletedSession(session: WorkoutSession, historyEntry: WorkoutHistoryEntry) {
+      const { data: sessionRow, error: sessionError } = await client()
+        .from('workout_sessions')
+        .upsert(toWorkoutSessionRow(userId, session, historyEntry), { onConflict: 'user_id,client_session_id' })
+        .select('id')
+        .single()
+      if (sessionError) throw sessionError
+      const sessionServerId = sessionRow.id
+
+      // No client_*_id / unique constraint exists on workout_exercises or
+      // workout_sets (see migration 2), so replace-in-place per session is
+      // the idempotent strategy: deleting the exercises cascades to their
+      // sets, then both are re-inserted fresh from the current session.
+      const { error: deleteError } = await client()
+        .from('workout_exercises')
+        .delete()
+        .eq('session_id', sessionServerId)
+        .eq('user_id', userId)
+      if (deleteError) throw deleteError
+
+      if (session.exercises.length === 0) return
+
+      const exerciseRows = session.exercises.map((exercise, position) =>
+        toWorkoutExerciseRow(userId, sessionServerId, exercise, position),
+      )
+      const { data: insertedExercises, error: exercisesError } = await client()
+        .from('workout_exercises')
+        .insert(exerciseRows)
+        .select('id, position')
+      if (exercisesError) throw exercisesError
+
+      const exercisesByPosition = new Map(insertedExercises.map((row) => [row.position, row.id]))
+      const setRows = session.exercises.flatMap((exercise, position) => {
+        const exerciseServerId = exercisesByPosition.get(position)
+        if (!exerciseServerId) return []
+        return exercise.sets.map((set) => toWorkoutSetRow(userId, exerciseServerId, set))
+      })
+      if (setRows.length === 0) return
+
+      const { error: setsError } = await client().from('workout_sets').insert(setRows)
+      if (setsError) throw setsError
+    },
+    async savePersonalRecord(record: PersonalRecord) {
+      const { error } = await client()
+        .from('personal_records')
+        .upsert(toPersonalRecordRow(userId, record), { onConflict: 'user_id,client_record_id' })
+      if (error) throw error
+    },
   }
 }
 
-export function createCloudProgressRepository(userId: string): ProgressRepository {
+export function createCloudProgressRepository(userId: string): ProgressRepository & ProgressRepositoryWriter {
   return {
     async getWeightLogs() {
       const { data, error } = await client()
@@ -80,10 +153,44 @@ export function createCloudProgressRepository(userId: string): ProgressRepositor
       if (error) throw error
       return (data ?? []).map(mapMeasurementRow)
     },
+    async saveWeightLog(log: WeightLog) {
+      const { error } = await client()
+        .from('weight_logs')
+        .upsert(toWeightLogRow(userId, log), { onConflict: 'user_id,client_log_id' })
+      if (error) throw error
+    },
+    async deleteWeightLog(clientLogId: string) {
+      const { error } = await client()
+        .from('weight_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_log_id', clientLogId)
+      if (error) throw error
+    },
+    async saveWeightGoal(goal: WeightGoal) {
+      const { error } = await client()
+        .from('weight_goals')
+        .upsert(toWeightGoalRow(userId, goal), { onConflict: 'user_id' })
+      if (error) throw error
+    },
+    async saveMeasurement(measurement: BodyMeasurement) {
+      const { error } = await client()
+        .from('body_measurements')
+        .upsert(toMeasurementRow(userId, measurement), { onConflict: 'user_id,client_measurement_id' })
+      if (error) throw error
+    },
+    async deleteMeasurement(clientMeasurementId: string) {
+      const { error } = await client()
+        .from('body_measurements')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_measurement_id', clientMeasurementId)
+      if (error) throw error
+    },
   }
 }
 
-export function createCloudNutritionRepository(userId: string): NutritionRepository {
+export function createCloudNutritionRepository(userId: string): NutritionRepository & NutritionRepositoryWriter {
   return {
     async getFoodEntries() {
       const { data, error } = await client().from('food_entries').select('*').eq('user_id', userId)
@@ -95,10 +202,30 @@ export function createCloudNutritionRepository(userId: string): NutritionReposit
       if (error) throw error
       return data ? mapNutritionGoalRow(data) : null
     },
+    async saveFoodEntry(entry: FoodEntry) {
+      const { error } = await client()
+        .from('food_entries')
+        .upsert(toFoodEntryRow(userId, entry), { onConflict: 'user_id,client_entry_id' })
+      if (error) throw error
+    },
+    async deleteFoodEntry(clientEntryId: string) {
+      const { error } = await client()
+        .from('food_entries')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_entry_id', clientEntryId)
+      if (error) throw error
+    },
+    async saveGoal(goal: NutritionGoal) {
+      const { error } = await client()
+        .from('nutrition_goals')
+        .upsert(toNutritionGoalRow(userId, goal), { onConflict: 'user_id' })
+      if (error) throw error
+    },
   }
 }
 
-export function createCloudHabitRepository(userId: string): HabitRepository {
+export function createCloudHabitRepository(userId: string): HabitRepository & HabitRepositoryWriter {
   return {
     async getHabits() {
       const { data, error } = await client().from('habits').select('*').eq('user_id', userId)
@@ -120,10 +247,64 @@ export function createCloudHabitRepository(userId: string): HabitRepository {
       if (error) throw error
       return data ? mapWaterGoalRow(data) : null
     },
+    async saveHabit(habit: Habit) {
+      const { error } = await client()
+        .from('habits')
+        .upsert(toHabitRow(userId, habit), { onConflict: 'user_id,client_habit_id' })
+      if (error) throw error
+    },
+    async deleteHabit(clientHabitId: string) {
+      const { error } = await client().from('habits').delete().eq('user_id', userId).eq('client_habit_id', clientHabitId)
+      if (error) throw error
+    },
+    async saveEntry(entry: HabitEntry, habit: Habit) {
+      // habit_entries.habit_id is a server-side FK — resolve it via an
+      // upsert of the parent habit (idempotent even if already synced)
+      // rather than assuming the caller pushed it first.
+      const { data: habitRow, error: habitError } = await client()
+        .from('habits')
+        .upsert(toHabitRow(userId, habit), { onConflict: 'user_id,client_habit_id' })
+        .select('id')
+        .single()
+      if (habitError) throw habitError
+
+      const { error: entryError } = await client()
+        .from('habit_entries')
+        .upsert(toHabitEntryRow(userId, habitRow.id, entry), { onConflict: 'user_id,client_entry_id' })
+      if (entryError) throw entryError
+    },
+    async deleteEntry(clientEntryId: string) {
+      const { error } = await client()
+        .from('habit_entries')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_entry_id', clientEntryId)
+      if (error) throw error
+    },
+    async saveWaterLog(log: WaterLog) {
+      const { error } = await client()
+        .from('water_logs')
+        .upsert(toWaterLogRow(userId, log), { onConflict: 'user_id,client_log_id' })
+      if (error) throw error
+    },
+    async deleteWaterLog(clientLogId: string) {
+      const { error } = await client()
+        .from('water_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_log_id', clientLogId)
+      if (error) throw error
+    },
+    async saveWaterGoal(goal: WaterGoal) {
+      const { error } = await client()
+        .from('water_goals')
+        .upsert(toWaterGoalRow(userId, goal), { onConflict: 'user_id' })
+      if (error) throw error
+    },
   }
 }
 
-export function createCloudGamificationRepository(userId: string): GamificationRepository {
+export function createCloudGamificationRepository(userId: string): GamificationRepository & GamificationRepositoryWriter {
   return {
     async getXpEvents() {
       const { data, error } = await client().from('xp_events').select('*').eq('user_id', userId)
@@ -140,6 +321,45 @@ export function createCloudGamificationRepository(userId: string): GamificationR
       if (error) throw error
       return ((data ?? []) as ChallengeCompletionRow[]).map((row) => row.instance_id)
     },
+    async ensureProfile(createdAt: string) {
+      const { error } = await client()
+        .from('gamification_profiles')
+        .upsert({ user_id: userId, created_at: createdAt }, { onConflict: 'user_id', ignoreDuplicates: true })
+      if (error) throw error
+    },
+    async saveXpEvents(events: XPEvent[]) {
+      if (events.length === 0) return
+      // `ignoreDuplicates` is the anti-farming guarantee: (user_id, event_id)
+      // is the table's primary key, so a re-synced or re-derived event with
+      // the same deterministic id can never be counted twice server-side.
+      const { error } = await client()
+        .from('xp_events')
+        .upsert(
+          events.map((event) => toXpEventRow(userId, event)),
+          { onConflict: 'user_id,event_id', ignoreDuplicates: true },
+        )
+      if (error) throw error
+    },
+    async saveEarnedBadges(badges: EarnedBadge[]) {
+      if (badges.length === 0) return
+      const { error } = await client()
+        .from('earned_badges')
+        .upsert(
+          badges.map((badge) => toEarnedBadgeRow(userId, badge)),
+          { onConflict: 'user_id,badge_id', ignoreDuplicates: true },
+        )
+      if (error) throw error
+    },
+    async saveCompletedChallenges(instanceIds: string[], completedAt: string) {
+      if (instanceIds.length === 0) return
+      const { error } = await client()
+        .from('challenge_completions')
+        .upsert(
+          instanceIds.map((instanceId) => toChallengeCompletionRow(userId, instanceId, completedAt)),
+          { onConflict: 'user_id,instance_id', ignoreDuplicates: true },
+        )
+      if (error) throw error
+    },
   }
 }
 
@@ -150,5 +370,60 @@ export function createCloudRepositories(userId: string): Repositories {
     nutrition: createCloudNutritionRepository(userId),
     habit: createCloudHabitRepository(userId),
     gamification: createCloudGamificationRepository(userId),
+  }
+}
+
+/**
+ * Settings > Data & Privacy > "Reset Fitness Data" (Part 3) predates cloud
+ * sync (Part 5) and only ever cleared local state — now that a signed-in
+ * user's data round-trips to Supabase, a local-only reset would be undone
+ * by the very next sign-in pulling the old data back down. This clears
+ * every user-owned row across all 17 domain tables (never `profiles`,
+ * never the static exercise/program catalogue, which isn't user data at
+ * all — it has no table at all).
+ *
+ * `workout_sessions` and `habits` cascade-delete their children
+ * (`workout_exercises`/`workout_sets` and `habit_entries` respectively,
+ * both `on delete cascade` — see migrations 2 and 5); the rest are deleted
+ * directly since nothing else references them. These are the only 3
+ * cross-table foreign keys in the whole schema, so there is no ordering
+ * dependency among the 14 tables below — every delete is scoped only by
+ * `user_id`, is independent of the others, and RLS's own `..._delete_own`
+ * policy (`auth.uid() = user_id`, present on all 17 tables) enforces the
+ * same ownership check server-side regardless of what this function is
+ * called with, so a wrong or forged `userId` can delete zero rows, never
+ * another user's. Every table is attempted even if one fails, so a single
+ * transient error can't leave the rest of the reset half-done; any
+ * failures are collected and thrown together once every table has been
+ * tried.
+ */
+export async function deleteAllCloudUserData(userId: string): Promise<void> {
+  const tables = [
+    'workout_sessions',
+    'personal_records',
+    'weight_logs',
+    'body_measurements',
+    'weight_goals',
+    'nutrition_goals',
+    'food_entries',
+    'habits',
+    'water_goals',
+    'water_logs',
+    'gamification_profiles',
+    'xp_events',
+    'earned_badges',
+    'challenge_completions',
+  ] as const
+
+  const results = await Promise.allSettled(
+    tables.map(async (table) => {
+      const { error } = await client().from(table).delete().eq('user_id', userId)
+      if (error) throw new Error(`${table}: ${error.message}`)
+    }),
+  )
+
+  const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected')
+  if (failures.length > 0) {
+    throw new Error(`Failed to clear cloud data for ${failures.length} table(s): ${failures.map((f) => f.reason.message).join('; ')}`)
   }
 }

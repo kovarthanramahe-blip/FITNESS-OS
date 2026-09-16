@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { mockMeasurements } from '@/data/mockMeasurements'
 import { mockWeightGoal, mockWeightLogs } from '@/data/mockWeightLog'
+import { pushMeasurement, pushMeasurementDelete, pushWeightGoal, pushWeightLog, pushWeightLogDelete } from '@/lib/cloudSync/push'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { BodyMeasurement, WeightGoal, WeightLog } from '@/types/progress'
 
@@ -94,10 +95,9 @@ function nextId(prefix: string): string {
 // ---------------------------------------------------------------------------
 
 export function addWeightLog(entry: { date: string; weightKg: number; note?: string }): void {
-  setState((current) => ({
-    ...current,
-    weightLogs: [...current.weightLogs, { id: nextId('weight'), ...entry }],
-  }))
+  const newLog: WeightLog = { id: nextId('weight'), ...entry }
+  setState((current) => ({ ...current, weightLogs: [...current.weightLogs, newLog] }))
+  void pushWeightLog(newLog)
 }
 
 export function updateWeightLog(id: string, patch: Partial<Pick<WeightLog, 'date' | 'weightKg' | 'note'>>): void {
@@ -105,6 +105,8 @@ export function updateWeightLog(id: string, patch: Partial<Pick<WeightLog, 'date
     ...current,
     weightLogs: current.weightLogs.map((log) => (log.id === id ? { ...log, ...patch } : log)),
   }))
+  const updated = state.weightLogs.find((log) => log.id === id)
+  if (updated) void pushWeightLog(updated)
 }
 
 export function deleteWeightLog(id: string): void {
@@ -112,10 +114,12 @@ export function deleteWeightLog(id: string): void {
     ...current,
     weightLogs: current.weightLogs.filter((log) => log.id !== id),
   }))
+  void pushWeightLogDelete(id)
 }
 
 export function setWeightGoal(goal: Partial<WeightGoal>): void {
   setState((current) => ({ ...current, weightGoal: { ...current.weightGoal, ...goal } }))
+  void pushWeightGoal(state.weightGoal)
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +133,9 @@ export function addMeasurement(entry: {
   unit: BodyMeasurement['unit']
   note?: string
 }): void {
-  setState((current) => ({
-    ...current,
-    measurements: [...current.measurements, { id: nextId('measurement'), ...entry }],
-  }))
+  const newMeasurement: BodyMeasurement = { id: nextId('measurement'), ...entry }
+  setState((current) => ({ ...current, measurements: [...current.measurements, newMeasurement] }))
+  void pushMeasurement(newMeasurement)
 }
 
 export function updateMeasurement(
@@ -145,6 +148,8 @@ export function updateMeasurement(
       measurement.id === id ? { ...measurement, ...patch } : measurement,
     ),
   }))
+  const updated = state.measurements.find((measurement) => measurement.id === id)
+  if (updated) void pushMeasurement(updated)
 }
 
 export function deleteMeasurement(id: string): void {
@@ -152,6 +157,43 @@ export function deleteMeasurement(id: string): void {
     ...current,
     measurements: current.measurements.filter((measurement) => measurement.id !== id),
   }))
+  void pushMeasurementDelete(id)
+}
+
+export interface ProgressCloudSnapshot {
+  weightLogs: WeightLog[]
+  weightGoal: WeightGoal | null
+  measurements: BodyMeasurement[]
+}
+
+/**
+ * Merges a cloud snapshot (pulled on sign-in) into local state: cloud items
+ * win on a shared id, any local-only item is kept (never silently dropped),
+ * and a null cloud goal means "nothing to pull," so the local goal stands.
+ * Returns exactly what still needs pushing so a fresh sign-in on this
+ * device reconciles both directions instead of only pulling.
+ */
+export function mergeProgressFromCloud(cloud: ProgressCloudSnapshot): {
+  localOnlyWeightLogs: WeightLog[]
+  localOnlyMeasurements: BodyMeasurement[]
+  weightGoalToPush: WeightGoal | null
+} {
+  const cloudLogIds = new Set(cloud.weightLogs.map((log) => log.id))
+  const localOnlyWeightLogs = state.weightLogs.filter((log) => !cloudLogIds.has(log.id))
+
+  const cloudMeasurementIds = new Set(cloud.measurements.map((measurement) => measurement.id))
+  const localOnlyMeasurements = state.measurements.filter((measurement) => !cloudMeasurementIds.has(measurement.id))
+
+  const isDefaultGoal = state.weightGoal.startingWeightKg === 0 && state.weightGoal.targetWeightKg === 0
+  const weightGoalToPush = !cloud.weightGoal && !isDefaultGoal ? state.weightGoal : null
+
+  setState((current) => ({
+    weightLogs: [...localOnlyWeightLogs, ...cloud.weightLogs],
+    weightGoal: cloud.weightGoal ?? current.weightGoal,
+    measurements: [...localOnlyMeasurements, ...cloud.measurements],
+  }))
+
+  return { localOnlyWeightLogs, localOnlyMeasurements, weightGoalToPush }
 }
 
 /**

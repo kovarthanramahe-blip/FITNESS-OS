@@ -2,7 +2,7 @@ import type { EarnedBadge, XPEvent } from '@/types/gamification'
 import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
 import type { FoodEntry, NutritionGoal } from '@/types/nutrition'
 import type { BodyMeasurement, PersonalRecord, WeightGoal, WeightLog } from '@/types/progress'
-import type { WorkoutHistoryEntry } from '@/types/workout'
+import type { WorkoutHistoryEntry, WorkoutSession } from '@/types/workout'
 
 /**
  * The repository boundary for Phase 7: a read-only view over each domain,
@@ -50,4 +50,49 @@ export interface Repositories {
   nutrition: NutritionRepository
   habit: HabitRepository
   gamification: GamificationRepository
+}
+
+/**
+ * Part 5 write surface — cloud-only. Local writes intentionally continue to
+ * go straight through each store's own actions (see the comment above), so
+ * these methods exist solely on the cloud repositories returned by
+ * `createCloudXRepository`, never on `local/index.ts` or the generic
+ * `Repositories` shape used by `getRepositories()`.
+ */
+export interface WorkoutRepositoryWriter {
+  /** Upserts the session (by client_session_id) then replaces its exercises/sets — idempotent on retry. */
+  saveCompletedSession(session: WorkoutSession, historyEntry: WorkoutHistoryEntry): Promise<void>
+  savePersonalRecord(record: PersonalRecord): Promise<void>
+}
+
+export interface ProgressRepositoryWriter {
+  saveWeightLog(log: WeightLog): Promise<void>
+  deleteWeightLog(clientLogId: string): Promise<void>
+  saveWeightGoal(goal: WeightGoal): Promise<void>
+  saveMeasurement(measurement: BodyMeasurement): Promise<void>
+  deleteMeasurement(clientMeasurementId: string): Promise<void>
+}
+
+export interface NutritionRepositoryWriter {
+  saveFoodEntry(entry: FoodEntry): Promise<void>
+  deleteFoodEntry(clientEntryId: string): Promise<void>
+  saveGoal(goal: NutritionGoal): Promise<void>
+}
+
+export interface HabitRepositoryWriter {
+  saveHabit(habit: Habit): Promise<void>
+  deleteHabit(clientHabitId: string): Promise<void>
+  /** Also upserts `habit` first so the parent row is guaranteed to exist before the entry references it. */
+  saveEntry(entry: HabitEntry, habit: Habit): Promise<void>
+  deleteEntry(clientEntryId: string): Promise<void>
+  saveWaterLog(log: WaterLog): Promise<void>
+  deleteWaterLog(clientLogId: string): Promise<void>
+  saveWaterGoal(goal: WaterGoal): Promise<void>
+}
+
+export interface GamificationRepositoryWriter {
+  ensureProfile(createdAt: string): Promise<void>
+  saveXpEvents(events: XPEvent[]): Promise<void>
+  saveEarnedBadges(badges: EarnedBadge[]): Promise<void>
+  saveCompletedChallenges(instanceIds: string[], completedAt: string): Promise<void>
 }

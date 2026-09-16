@@ -1,5 +1,14 @@
 import { useSyncExternalStore } from 'react'
 import { mockHabitEntries, mockHabits, mockWaterGoal, mockWaterLogs } from '@/data/mockHabits'
+import {
+  pushHabit,
+  pushHabitDelete,
+  pushHabitEntry,
+  pushHabitEntryDelete,
+  pushWaterGoal,
+  pushWaterLog,
+  pushWaterLogDelete,
+} from '@/lib/cloudSync/push'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Habit, HabitEntry, HabitIconKey, HabitSchedule, WaterGoal, WaterLog } from '@/types/habits'
 import { getTodayDateString } from '@/utils/dateRange'
@@ -113,10 +122,9 @@ export interface HabitInput {
 }
 
 export function addHabit(input: HabitInput): void {
-  setState((current) => ({
-    ...current,
-    habits: [...current.habits, { id: nextId('habit'), createdAt: new Date().toISOString(), ...input }],
-  }))
+  const newHabit: Habit = { id: nextId('habit'), createdAt: new Date().toISOString(), ...input }
+  setState((current) => ({ ...current, habits: [...current.habits, newHabit] }))
+  void pushHabit(newHabit)
 }
 
 /** Never touches `entries` — editing a habit's definition never rewrites its completion history. */
@@ -125,6 +133,8 @@ export function editHabit(id: string, patch: Partial<HabitInput>): void {
     ...current,
     habits: current.habits.map((habit) => (habit.id === id ? { ...habit, ...patch } : habit)),
   }))
+  const updated = state.habits.find((habit) => habit.id === id)
+  if (updated) void pushHabit(updated)
 }
 
 export function deleteHabit(id: string): void {
@@ -133,6 +143,7 @@ export function deleteHabit(id: string): void {
     habits: current.habits.filter((habit) => habit.id !== id),
     entries: current.entries.filter((entry) => entry.habitId !== id),
   }))
+  void pushHabitDelete(id)
 }
 
 export function toggleHabitActive(id: string): void {
@@ -140,6 +151,8 @@ export function toggleHabitActive(id: string): void {
     ...current,
     habits: current.habits.map((habit) => (habit.id === id ? { ...habit, active: !habit.active } : habit)),
   }))
+  const updated = state.habits.find((habit) => habit.id === id)
+  if (updated) void pushHabit(updated)
 }
 
 // ---------------------------------------------------------------------------
@@ -148,21 +161,25 @@ export function toggleHabitActive(id: string): void {
 // ---------------------------------------------------------------------------
 
 export function completeHabit(habitId: string, date: string = getTodayDateString()): void {
+  const newEntry: HabitEntry = { id: nextId('entry'), habitId, date, completedAt: new Date().toISOString() }
+  let added = false
   setState((current) => {
     const alreadyDone = current.entries.some((entry) => entry.habitId === habitId && entry.date === date)
     if (alreadyDone) return current
-    return {
-      ...current,
-      entries: [...current.entries, { id: nextId('entry'), habitId, date, completedAt: new Date().toISOString() }],
-    }
+    added = true
+    return { ...current, entries: [...current.entries, newEntry] }
   })
+  const habit = state.habits.find((h) => h.id === habitId)
+  if (added && habit) void pushHabitEntry(newEntry, habit)
 }
 
 export function uncompleteHabit(habitId: string, date: string = getTodayDateString()): void {
+  const removed = state.entries.find((entry) => entry.habitId === habitId && entry.date === date)
   setState((current) => ({
     ...current,
     entries: current.entries.filter((entry) => !(entry.habitId === habitId && entry.date === date)),
   }))
+  if (removed) void pushHabitEntryDelete(removed.id)
 }
 
 /** Active habits as of `date` — callers derive each one's day status via getHabitStatusForDate. */
@@ -179,22 +196,73 @@ export function getHabitHistory(habitId: string): HabitEntry[] {
 // ---------------------------------------------------------------------------
 
 export function addWaterLog(amountMl: number, date: string = getTodayDateString()): void {
-  setState((current) => ({
-    ...current,
-    waterLogs: [...current.waterLogs, { id: nextId('water'), date, amountMl, createdAt: new Date().toISOString() }],
-  }))
+  const newLog: WaterLog = { id: nextId('water'), date, amountMl, createdAt: new Date().toISOString() }
+  setState((current) => ({ ...current, waterLogs: [...current.waterLogs, newLog] }))
+  void pushWaterLog(newLog)
 }
 
 export function removeLatestWaterLog(date: string = getTodayDateString()): void {
+  const latest = getLatestWaterLogForDate(state.waterLogs, date)
   setState((current) => {
-    const latest = getLatestWaterLogForDate(current.waterLogs, date)
     if (!latest) return current
     return { ...current, waterLogs: current.waterLogs.filter((log) => log.id !== latest.id) }
   })
+  if (latest) void pushWaterLogDelete(latest.id)
 }
 
 export function setWaterGoal(goal: Partial<WaterGoal>): void {
   setState((current) => ({ ...current, waterGoal: { ...current.waterGoal, ...goal } }))
+  void pushWaterGoal(state.waterGoal)
+}
+
+export interface HabitCloudSnapshot {
+  habits: Habit[]
+  entries: HabitEntry[]
+  waterLogs: WaterLog[]
+  waterGoal: WaterGoal | null
+}
+
+/**
+ * Merges a cloud snapshot (pulled on sign-in) into local state: cloud
+ * items win on a shared id, any local-only item is kept, and a null cloud
+ * water goal means "nothing to pull yet." Returns what still needs
+ * pushing so a fresh sign-in on this device reconciles both directions —
+ * `localOnlyEntries` is paired with its owning habit (falling back to the
+ * merged habit list) since a cloud push needs the full `Habit` to resolve
+ * the entry's server-side foreign key.
+ */
+export function mergeHabitFromCloud(cloud: HabitCloudSnapshot): {
+  localOnlyHabits: Habit[]
+  localOnlyEntries: { entry: HabitEntry; habit: Habit }[]
+  localOnlyWaterLogs: WaterLog[]
+  waterGoalToPush: WaterGoal | null
+} {
+  const cloudHabitIds = new Set(cloud.habits.map((habit) => habit.id))
+  const localOnlyHabits = state.habits.filter((habit) => !cloudHabitIds.has(habit.id))
+  const mergedHabits = [...localOnlyHabits, ...cloud.habits]
+  const habitsById = new Map(mergedHabits.map((habit) => [habit.id, habit]))
+
+  const cloudEntryIds = new Set(cloud.entries.map((entry) => entry.id))
+  const localOnlyEntries = state.entries
+    .filter((entry) => !cloudEntryIds.has(entry.id))
+    .flatMap((entry) => {
+      const habit = habitsById.get(entry.habitId)
+      return habit ? [{ entry, habit }] : []
+    })
+
+  const cloudWaterLogIds = new Set(cloud.waterLogs.map((log) => log.id))
+  const localOnlyWaterLogs = state.waterLogs.filter((log) => !cloudWaterLogIds.has(log.id))
+
+  const waterGoalToPush = cloud.waterGoal ? null : state.waterGoal
+
+  setState((current) => ({
+    habits: mergedHabits,
+    entries: [...localOnlyEntries.map((item) => item.entry), ...cloud.entries],
+    waterLogs: [...localOnlyWaterLogs, ...cloud.waterLogs],
+    waterGoal: cloud.waterGoal ?? current.waterGoal,
+  }))
+
+  return { localOnlyHabits, localOnlyEntries, localOnlyWaterLogs, waterGoalToPush }
 }
 
 /**

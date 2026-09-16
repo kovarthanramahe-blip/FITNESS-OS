@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { BADGES, BADGES_BY_ID } from '@/data/gamification'
+import { pushCompletedChallenges, pushEarnedBadges, pushGamificationProfile, pushXpEvents } from '@/lib/cloudSync/push'
 import { onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Badge, ChallengeProgress, EarnedBadge, GamificationProfile, GamificationStats, XPEvent } from '@/types/gamification'
 import type { BadgeContext } from '@/utils/badgeEngine'
@@ -157,18 +158,20 @@ export function syncGamification(now: Date = new Date()): SyncResult {
     return NO_SYNC_CHANGES
   }
 
+  const newEarnedBadges = newBadges.map((badge) => ({ badgeId: badge.id, earnedAt: now.toISOString() }))
+  const newChallengeInstanceIds = newlyCompletedChallenges.map((progress) => progress.instanceId)
+
   setState((current) => ({
     ...current,
     xpEvents: [...current.xpEvents, ...newXpEvents],
-    earnedBadges: [
-      ...current.earnedBadges,
-      ...newBadges.map((badge) => ({ badgeId: badge.id, earnedAt: now.toISOString() })),
-    ],
-    completedChallengeIds: [
-      ...current.completedChallengeIds,
-      ...newlyCompletedChallenges.map((progress) => progress.instanceId),
-    ],
+    earnedBadges: [...current.earnedBadges, ...newEarnedBadges],
+    completedChallengeIds: [...current.completedChallengeIds, ...newChallengeInstanceIds],
   }))
+
+  void pushGamificationProfile(state.createdAt)
+  void pushXpEvents(newXpEvents)
+  void pushEarnedBadges(newEarnedBadges)
+  void pushCompletedChallenges(newChallengeInstanceIds, now.toISOString())
 
   return { newXpEvents, newBadges }
 }
@@ -205,6 +208,43 @@ export function getGamificationStats(now: Date = new Date()): GamificationStats 
     weeklyChallenges: getWeeklyChallengeProgress(snapshot),
     streaks: getStreakSummary(snapshot),
   }
+}
+
+export interface GamificationCloudSnapshot {
+  xpEvents: XPEvent[]
+  earnedBadges: EarnedBadge[]
+  completedChallengeIds: string[]
+}
+
+/**
+ * Merges a cloud snapshot (pulled on sign-in) into local state — a union
+ * by id/badgeId/instanceId, never a drop. Since (user_id, event_id) /
+ * (user_id, badge_id) / (user_id, instance_id) are the tables' own primary
+ * keys, this union can never double-count an event the way farming would:
+ * an event present on both sides is the same row, not two.
+ */
+export function mergeGamificationFromCloud(cloud: GamificationCloudSnapshot): {
+  localOnlyXpEvents: XPEvent[]
+  localOnlyEarnedBadges: EarnedBadge[]
+  localOnlyChallengeIds: string[]
+} {
+  const cloudEventIds = new Set(cloud.xpEvents.map((event) => event.id))
+  const localOnlyXpEvents = state.xpEvents.filter((event) => !cloudEventIds.has(event.id))
+
+  const cloudBadgeIds = new Set(cloud.earnedBadges.map((badge) => badge.badgeId))
+  const localOnlyEarnedBadges = state.earnedBadges.filter((badge) => !cloudBadgeIds.has(badge.badgeId))
+
+  const cloudChallengeIds = new Set(cloud.completedChallengeIds)
+  const localOnlyChallengeIds = state.completedChallengeIds.filter((id) => !cloudChallengeIds.has(id))
+
+  setState((current) => ({
+    ...current,
+    xpEvents: [...localOnlyXpEvents, ...cloud.xpEvents],
+    earnedBadges: [...localOnlyEarnedBadges, ...cloud.earnedBadges],
+    completedChallengeIds: [...localOnlyChallengeIds, ...cloud.completedChallengeIds],
+  }))
+
+  return { localOnlyXpEvents, localOnlyEarnedBadges, localOnlyChallengeIds }
 }
 
 /**

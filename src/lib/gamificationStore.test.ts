@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest'
-import { getGamificationState, getGamificationStats, resetGamificationStoreForTests, syncGamification } from './gamificationStore'
+import { getGamificationState, getGamificationStats, mergeGamificationFromCloud, resetGamificationStoreForTests, syncGamification } from './gamificationStore'
 import { addWaterLog, completeHabit, getHabitState, resetHabitStoreForTests } from './habitStore'
 import { addFoodEntry, getNutritionState, resetNutritionStoreForTests } from './nutritionStore'
 import { addWeightLog, getProgressState, resetProgressStoreForTests } from './progressStore'
@@ -120,5 +120,51 @@ describe('getGamificationStats', () => {
     expect(Array.isArray(stats.earnedBadges)).toBe(true)
     expect(Array.isArray(stats.lockedBadges)).toBe(true)
     expect(stats.earnedBadges.length + stats.lockedBadges.length).toBeGreaterThan(0)
+  })
+})
+
+describe('mergeGamificationFromCloud', () => {
+  it('unions cloud and local-only xp events, keeping both — the union can never double-count an event', () => {
+    syncGamification()
+    const localOnlyEvent = getGamificationState().xpEvents[0]!
+    const cloudOnlyEvent = { id: 'cloud-event-1', type: 'weight_log' as const, amount: 10, date: '2024-06-01', sourceId: 'w1', description: 'Logged weight' }
+
+    const { localOnlyXpEvents } = mergeGamificationFromCloud({
+      xpEvents: [cloudOnlyEvent],
+      earnedBadges: [],
+      completedChallengeIds: [],
+    })
+
+    expect(localOnlyXpEvents.map((e) => e.id)).toContain(localOnlyEvent.id)
+    const ids = getGamificationState().xpEvents.map((e) => e.id)
+    expect(ids).toContain(localOnlyEvent.id)
+    expect(ids).toContain('cloud-event-1')
+  })
+
+  it('cloud wins on a shared event id — the (user_id, event_id) primary key means it is the same row, not a duplicate', () => {
+    syncGamification()
+    const sharedEvent = getGamificationState().xpEvents[0]!
+    const cloudVersion = { ...sharedEvent, description: 'Synced from another device' }
+
+    mergeGamificationFromCloud({ xpEvents: [cloudVersion], earnedBadges: [], completedChallengeIds: [] })
+
+    const countForId = getGamificationState().xpEvents.filter((e) => e.id === sharedEvent.id).length
+    expect(countForId).toBe(1)
+    expect(getGamificationState().xpEvents.find((e) => e.id === sharedEvent.id)?.description).toBe('Synced from another device')
+  })
+
+  it('unions earned badges and completed challenge ids by their own key', () => {
+    resetGamificationStoreForTests()
+    syncGamification()
+
+    const { localOnlyChallengeIds } = mergeGamificationFromCloud({
+      xpEvents: [],
+      earnedBadges: [{ badgeId: 'cloud-badge', earnedAt: '2024-06-01T00:00:00.000Z' }],
+      completedChallengeIds: ['cloud-challenge-1'],
+    })
+
+    expect(getGamificationState().earnedBadges.map((b) => b.badgeId)).toContain('cloud-badge')
+    expect(getGamificationState().completedChallengeIds).toContain('cloud-challenge-1')
+    expect(localOnlyChallengeIds).toEqual(getGamificationState().completedChallengeIds.filter((id) => id !== 'cloud-challenge-1'))
   })
 })
