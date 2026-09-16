@@ -331,18 +331,20 @@ describe('AuthProvider — native (Android) OAuth', () => {
     return { open, close }
   }
 
-  function mockApp() {
+  function mockApp(launchUrl?: string) {
     let urlOpenHandler: ((event: { url: string }) => void) | null = null
     const remove = vi.fn().mockResolvedValue(undefined)
+    const getLaunchUrl = vi.fn().mockResolvedValue(launchUrl ? { url: launchUrl } : undefined)
     vi.doMock('@capacitor/app', () => ({
       App: {
         addListener: vi.fn((eventName: string, handler: (event: { url: string }) => void) => {
           if (eventName === 'appUrlOpen') urlOpenHandler = handler
           return Promise.resolve({ remove })
         }),
+        getLaunchUrl,
       },
     }))
-    return { fireUrlOpen: (url: string) => urlOpenHandler?.({ url }), remove }
+    return { fireUrlOpen: (url: string) => urlOpenHandler?.({ url }), remove, getLaunchUrl }
   }
 
   it('opens the system browser instead of navigating the WebView, with skipBrowserRedirect and the native redirect URL', async () => {
@@ -389,6 +391,79 @@ describe('AuthProvider — native (Android) OAuth', () => {
 
     await waitFor(() => expect(mock.auth.exchangeCodeForSession).toHaveBeenCalledWith('abc123'))
     expect(close).toHaveBeenCalled()
+  })
+
+  it('cold start: exchanges the code from getLaunchUrl when the OAuth deep link launched a fresh process (appUrlOpen never fires in this case)', async () => {
+    mockCapacitorNative()
+    const { close } = mockBrowser()
+    mockApp('com.fitnessos.app://login-callback?code=cold-start-code')
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    await waitFor(() => expect(mock.auth.exchangeCodeForSession).toHaveBeenCalledWith('cold-start-code'))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('cold start: checks getLaunchUrl on every native mount', async () => {
+    mockCapacitorNative()
+    mockBrowser()
+    const { getLaunchUrl } = mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    await waitFor(() => expect(getLaunchUrl).toHaveBeenCalled())
+  })
+
+  it('cold start: a launch URL unrelated to the OAuth callback is ignored', async () => {
+    mockCapacitorNative()
+    mockBrowser()
+    mockApp('com.fitnessos.app://some-other-path')
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    expect(mock.auth.exchangeCodeForSession).not.toHaveBeenCalled()
+  })
+
+  it('cold start: no launch URL at all (a normal, non-OAuth app launch) never calls exchangeCodeForSession', async () => {
+    mockCapacitorNative()
+    mockBrowser()
+    mockApp(undefined)
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    expect(mock.auth.exchangeCodeForSession).not.toHaveBeenCalled()
   })
 
   it('ignores a deep link that does not match the OAuth callback URL', async () => {

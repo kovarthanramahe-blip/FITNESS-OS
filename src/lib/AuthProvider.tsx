@@ -162,9 +162,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // `exchangeCodeForSession` takes the PKCE `code` itself, not a URL —
     // see @supabase/auth-js's GoTrueClient.exchangeCodeForSession signature.
-    const handleUrlOpen = (event: URLOpenListenerEvent) => {
-      if (!event.url.startsWith(NATIVE_OAUTH_REDIRECT_URL)) return
-      const code = new URL(event.url).searchParams.get('code')
+    // Shared by both ways the OAuth deep link can reach the app (see below).
+    const processOAuthCallbackUrl = (url: string) => {
+      if (!url.startsWith(NATIVE_OAUTH_REDIRECT_URL)) return
+      const code = new URL(url).searchParams.get('code')
       void CapacitorBrowser.close()
       if (!code) return
       client.auth.exchangeCodeForSession(code).then(({ error: exchangeError }) => {
@@ -177,7 +178,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       })
     }
 
+    // Warm/backgrounded app: Android delivers the deep link via onNewIntent
+    // to the already-running bridge, which Capacitor surfaces as this event.
+    const handleUrlOpen = (event: URLOpenListenerEvent) => processOAuthCallbackUrl(event.url)
     const listenerPromise = CapacitorApp.addListener('appUrlOpen', handleUrlOpen)
+
+    // Cold start: if the OS killed the app while the user was completing
+    // sign-in in the Custom Tab, the deep link instead *launches* a fresh
+    // process — `appUrlOpen` never fires for the URL that started it, since
+    // no listener existed yet at that instant. `getLaunchUrl` is Capacitor's
+    // own API for recovering exactly that URL once the bridge is back up.
+    void CapacitorApp.getLaunchUrl().then((launchUrl) => {
+      if (launchUrl?.url) processOAuthCallbackUrl(launchUrl.url)
+    })
+
     return () => {
       void listenerPromise.then((handle) => handle.remove())
     }
