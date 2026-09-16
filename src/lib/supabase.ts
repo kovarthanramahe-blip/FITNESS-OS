@@ -23,6 +23,12 @@ export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: true,
+        // PKCE (not this library's default, which is implicit) returns a
+        // `?code=` query param instead of tokens in a URL fragment — the
+        // Android OAuth deep-link return can lose a fragment, but not a
+        // query param. `detectSessionInUrl` already exchanges it
+        // automatically on web, so this is safe for both platforms.
+        flowType: 'pkce',
       },
     })
   : null

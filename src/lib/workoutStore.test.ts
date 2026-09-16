@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { onStorageFailure, resetStorageHealthForTests } from '@/lib/localStorageHealth'
 import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addSet,
@@ -268,5 +269,53 @@ describe('mergeWorkoutFromCloud', () => {
     const cloudVersion = { ...localRecord, weightKg: 70 }
     mergeWorkoutFromCloud({ history: [], personalRecords: [cloudVersion] })
     expect(getWorkoutState().personalRecords).toEqual([cloudVersion])
+  })
+})
+
+describe('local persistence', () => {
+  beforeEach(() => {
+    resetStorageHealthForTests()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a successful write behaves exactly as before: the mutation is readable back from localStorage', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    completeSession()
+
+    const raw = window.localStorage.getItem('fitness-os:workout-store:v1')
+    expect(raw).not.toBeNull()
+    const persisted = JSON.parse(raw!) as { history: unknown[] }
+    expect(persisted.history).toEqual(getWorkoutState().history)
+  })
+
+  it('a failed localStorage write never crashes the mutation, and the in-memory state still updates', () => {
+    const before = getWorkoutState().history.length
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+
+    expect(() => {
+      startSession(sampleWorkout, 'Intermediate')
+      completeSession()
+    }).not.toThrow()
+
+    expect(getWorkoutState().history).toHaveLength(before + 1)
+  })
+
+  it('a failed write notifies exactly once via the shared storage-health channel', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+    const listener = vi.fn()
+    onStorageFailure(listener)
+
+    startSession(sampleWorkout, 'Intermediate')
+    completeSession()
+    selectProgram('advanced-ppl')
+
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })

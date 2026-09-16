@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { mockCompletedSessions, mockWorkoutHistory, seedPersonalRecords } from '@/data/mockWorkoutHistory'
 import { pushCompletedSession, pushPersonalRecord } from '@/lib/cloudSync/push'
+import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { PersonalRecord } from '@/types/progress'
 import type {
@@ -110,11 +111,7 @@ function persist(state: WorkoutStoreState): void {
     personalRecords: state.personalRecords,
     customWorkouts: state.customWorkouts,
   }
-  try {
-    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(toStore))
-  } catch {
-    // Storage can fail (quota, private mode) — the session still works in-memory.
-  }
+  persistLocalState(scopedStorageKey(BASE_STORAGE_KEY), toStore)
 }
 
 let state: WorkoutStoreState = loadPersistedState()

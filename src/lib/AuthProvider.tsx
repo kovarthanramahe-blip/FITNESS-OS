@@ -1,9 +1,19 @@
 import type { Session } from '@supabase/supabase-js'
+import { App as CapacitorApp, type URLOpenListenerEvent } from '@capacitor/app'
+import { Browser as CapacitorBrowser } from '@capacitor/browser'
+import { Capacitor } from '@capacitor/core'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AuthContext, type AuthContextValue } from '@/lib/authContext'
 import { isSupabaseConfigured, supabase } from '@/lib/supabase'
 import { setCurrentUserId } from '@/lib/storageScope'
 import type { AuthError, AuthUser } from '@/types/auth'
+
+/**
+ * Must exactly match a Redirect URL registered in the Supabase dashboard
+ * (Authentication -> URL Configuration) and the intent-filter scheme in
+ * android/app/src/main/AndroidManifest.xml — see docs/android-oauth-setup.md.
+ */
+const NATIVE_OAUTH_REDIRECT_URL = 'com.fitnessos.app://login-callback'
 
 function mapSessionUser(session: Session | null): AuthUser | null {
   const user = session?.user
@@ -58,7 +68,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.error('[Fitness OS] Failed to restore Supabase session:', sessionError)
           setError({ reason: 'session_expired', message: 'Your session could not be restored. Please sign in again.' })
         }
-        setSession(data.session ?? null)
+        const nextSession = data.session ?? null
+        // Resolve the local storage scope BEFORE unblocking the UI (`setLoading(false)`):
+        // every domain store's `onUserScopeChange` listener reloads its state from the
+        // correctly-scoped key synchronously, in this same tick, so the first render of
+        // the authenticated app never has a chance to read the wrong (guest/demo) scope.
+        setCurrentUserId(mapSessionUser(nextSession)?.id ?? null)
+        setSession(nextSession)
         setLoading(false)
       })
       .catch((caughtError: unknown) => {
@@ -72,6 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       if (!active) return
+      setCurrentUserId(mapSessionUser(nextSession)?.id ?? null)
       setSession(nextSession)
       setLoading(false)
     })
@@ -89,6 +106,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
     setError(null)
     try {
+      // Native (Android/iOS): Google blocks its OAuth consent screen inside an
+      // embedded WebView, so this must open in the system browser (Custom Tabs)
+      // instead of navigating the app's own WebView. `skipBrowserRedirect`
+      // stops supabase-js from doing that navigation itself; we open the
+      // returned URL ourselves and pick the session back up in the
+      // `appUrlOpen` listener below once the OS routes the deep-link
+      // redirect back into the app.
+      if (Capacitor.isNativePlatform()) {
+        const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: { redirectTo: NATIVE_OAUTH_REDIRECT_URL, skipBrowserRedirect: true },
+        })
+        if (oauthError || !data.url) {
+          console.error('[Fitness OS] Google sign-in failed:', oauthError)
+          setError({ reason: 'oauth_failed', message: 'Google sign-in failed to start. Please try again.' })
+          return
+        }
+        await CapacitorBrowser.open({ url: data.url })
+        return
+      }
+
       const { error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: window.location.origin },
@@ -118,14 +156,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (!supabase || !Capacitor.isNativePlatform()) return
+    const client = supabase
+
+    // `exchangeCodeForSession` takes the PKCE `code` itself, not a URL —
+    // see @supabase/auth-js's GoTrueClient.exchangeCodeForSession signature.
+    const handleUrlOpen = (event: URLOpenListenerEvent) => {
+      if (!event.url.startsWith(NATIVE_OAUTH_REDIRECT_URL)) return
+      const code = new URL(event.url).searchParams.get('code')
+      void CapacitorBrowser.close()
+      if (!code) return
+      client.auth.exchangeCodeForSession(code).then(({ error: exchangeError }) => {
+        if (exchangeError) {
+          console.error('[Fitness OS] Failed to complete Google sign-in:', exchangeError)
+          setError({ reason: 'oauth_failed', message: 'Google sign-in didn’t complete. Please try again.' })
+        }
+        // On success, this resolves through the same onAuthStateChange
+        // subscription above — no separate state update needed here.
+      })
+    }
+
+    const listenerPromise = CapacitorApp.addListener('appUrlOpen', handleUrlOpen)
+    return () => {
+      void listenerPromise.then((handle) => handle.remove())
+    }
+  }, [])
+
   const clearError = useCallback(() => setError(null), [])
 
   const user = useMemo(() => mapSessionUser(session), [session])
-
-  useEffect(() => {
-    if (loading) return
-    setCurrentUserId(user?.id ?? null)
-  }, [user, loading])
 
   const value = useMemo<AuthContextValue>(
     () => ({

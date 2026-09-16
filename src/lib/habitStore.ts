@@ -9,6 +9,7 @@ import {
   pushWaterLog,
   pushWaterLogDelete,
 } from '@/lib/cloudSync/push'
+import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Habit, HabitEntry, HabitIconKey, HabitSchedule, WaterGoal, WaterLog } from '@/types/habits'
 import { getTodayDateString } from '@/utils/dateRange'
@@ -61,11 +62,7 @@ function loadPersistedState(): HabitStoreState {
 
 function persist(state: HabitStoreState): void {
   if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
-  } catch {
-    // Storage can fail (quota, private mode) — the session still works in-memory.
-  }
+  persistLocalState(scopedStorageKey(BASE_STORAGE_KEY), state)
 }
 
 let state: HabitStoreState = loadPersistedState()

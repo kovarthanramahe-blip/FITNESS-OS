@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { mockMeasurements } from '@/data/mockMeasurements'
 import { mockWeightGoal, mockWeightLogs } from '@/data/mockWeightLog'
 import { pushMeasurement, pushMeasurementDelete, pushWeightGoal, pushWeightLog, pushWeightLogDelete } from '@/lib/cloudSync/push'
+import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { BodyMeasurement, WeightGoal, WeightLog } from '@/types/progress'
 
@@ -48,11 +49,7 @@ function loadPersistedState(): ProgressStoreState {
 
 function persist(state: ProgressStoreState): void {
   if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
-  } catch {
-    // Storage can fail (quota, private mode) — the session still works in-memory.
-  }
+  persistLocalState(scopedStorageKey(BASE_STORAGE_KEY), state)
 }
 
 let state: ProgressStoreState = loadPersistedState()

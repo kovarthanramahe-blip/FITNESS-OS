@@ -305,3 +305,176 @@ describe('AuthProvider — Supabase configured', () => {
     expect(screen.getByTestId('error')).toHaveTextContent('')
   })
 })
+
+describe('AuthProvider — native (Android) OAuth', () => {
+  function makeSupabaseMock() {
+    const unsubscribe = vi.fn()
+    return {
+      auth: {
+        getSession: vi.fn().mockResolvedValue({ data: { session: null }, error: null }),
+        onAuthStateChange: vi.fn(() => ({ data: { subscription: { unsubscribe } } })),
+        signInWithOAuth: vi.fn().mockResolvedValue({ data: { url: 'https://accounts.google.com/o/oauth2/auth?...' }, error: null }),
+        signOut: vi.fn().mockResolvedValue({ error: null }),
+        exchangeCodeForSession: vi.fn().mockResolvedValue({ data: {}, error: null }),
+      },
+    }
+  }
+
+  function mockCapacitorNative() {
+    vi.doMock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }))
+  }
+
+  function mockBrowser() {
+    const open = vi.fn().mockResolvedValue(undefined)
+    const close = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('@capacitor/browser', () => ({ Browser: { open, close } }))
+    return { open, close }
+  }
+
+  function mockApp() {
+    let urlOpenHandler: ((event: { url: string }) => void) | null = null
+    const remove = vi.fn().mockResolvedValue(undefined)
+    vi.doMock('@capacitor/app', () => ({
+      App: {
+        addListener: vi.fn((eventName: string, handler: (event: { url: string }) => void) => {
+          if (eventName === 'appUrlOpen') urlOpenHandler = handler
+          return Promise.resolve({ remove })
+        }),
+      },
+    }))
+    return { fireUrlOpen: (url: string) => urlOpenHandler?.({ url }), remove }
+  }
+
+  it('opens the system browser instead of navigating the WebView, with skipBrowserRedirect and the native redirect URL', async () => {
+    mockCapacitorNative()
+    const { open } = mockBrowser()
+    mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    const user = userEvent.setup()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    await user.click(screen.getByText('sign in'))
+
+    expect(mock.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: 'com.fitnessos.app://login-callback', skipBrowserRedirect: true },
+    })
+    expect(open).toHaveBeenCalledWith({ url: 'https://accounts.google.com/o/oauth2/auth?...' })
+  })
+
+  it('exchanges the code for a session and closes the browser when the OAuth deep link returns', async () => {
+    mockCapacitorNative()
+    const { close } = mockBrowser()
+    const { fireUrlOpen } = mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireUrlOpen('com.fitnessos.app://login-callback?code=abc123')
+
+    await waitFor(() => expect(mock.auth.exchangeCodeForSession).toHaveBeenCalledWith('abc123'))
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('ignores a deep link that does not match the OAuth callback URL', async () => {
+    mockCapacitorNative()
+    mockBrowser()
+    const { fireUrlOpen } = mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireUrlOpen('com.fitnessos.app://some-other-path')
+
+    expect(mock.auth.exchangeCodeForSession).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a friendly error, never the raw one, when the code exchange fails', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockCapacitorNative()
+    mockBrowser()
+    const { fireUrlOpen } = mockApp()
+    const mock = makeSupabaseMock()
+    mock.auth.exchangeCodeForSession.mockResolvedValue({ data: {}, error: { message: 'invalid grant: raw detail' } })
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    fireUrlOpen('com.fitnessos.app://login-callback?code=bad-code')
+
+    await waitFor(() => expect(screen.getByTestId('error-reason')).toHaveTextContent('oauth_failed'))
+    expect(screen.getByTestId('error')).not.toHaveTextContent('raw detail')
+  })
+
+  it('removes the appUrlOpen listener on unmount', async () => {
+    mockCapacitorNative()
+    mockBrowser()
+    const { remove } = mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    const { unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    unmount()
+    await waitFor(() => expect(remove).toHaveBeenCalled())
+  })
+
+  it('never registers native OAuth handling on web (Capacitor.isNativePlatform() is false)', async () => {
+    vi.doMock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }))
+    const { open } = mockBrowser()
+    mockApp()
+    const mock = makeSupabaseMock()
+    vi.doMock('@/lib/supabase', () => ({ isSupabaseConfigured: true, supabase: mock }))
+
+    const { AuthProvider, TestConsumer } = await loadAuth()
+    const user = userEvent.setup()
+    render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    )
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+
+    await user.click(screen.getByText('sign in'))
+
+    expect(mock.auth.signInWithOAuth).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: window.location.origin },
+    })
+    expect(open).not.toHaveBeenCalled()
+  })
+})

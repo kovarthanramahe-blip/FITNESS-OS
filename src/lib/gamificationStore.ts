@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { BADGES, BADGES_BY_ID } from '@/data/gamification'
 import { pushCompletedChallenges, pushEarnedBadges, pushGamificationProfile, pushXpEvents } from '@/lib/cloudSync/push'
+import { persistLocalState } from '@/lib/localStorageHealth'
 import { onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
 import type { Badge, ChallengeProgress, EarnedBadge, GamificationProfile, GamificationStats, XPEvent } from '@/types/gamification'
 import type { BadgeContext } from '@/utils/badgeEngine'
@@ -67,11 +68,7 @@ function loadPersistedState(): GamificationStoreState {
 
 function persist(state: GamificationStoreState): void {
   if (typeof window === 'undefined') return
-  try {
-    window.localStorage.setItem(scopedStorageKey(BASE_STORAGE_KEY), JSON.stringify(state))
-  } catch {
-    // Storage can fail (quota, private mode) — the session still works in-memory.
-  }
+  persistLocalState(scopedStorageKey(BASE_STORAGE_KEY), state)
 }
 
 let state: GamificationStoreState = loadPersistedState()

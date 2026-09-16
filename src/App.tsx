@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom'
 import { AppLayout } from '@/layouts/AppLayout'
 import { LoadingState } from '@/components/ui/LoadingState'
 import { RequireAuth } from '@/components/auth/RequireAuth'
+import { useAndroidBackButton } from '@/hooks/useAndroidBackButton'
 
 const Dashboard = lazy(() => import('@/pages/Dashboard').then((m) => ({ default: m.Dashboard })))
 const Workout = lazy(() => import('@/pages/Workout').then((m) => ({ default: m.Workout })))
@@ -16,6 +17,8 @@ const Settings = lazy(() => import('@/pages/Settings').then((m) => ({ default: m
 const Login = lazy(() => import('@/pages/Login').then((m) => ({ default: m.Login })))
 
 function App() {
+  useAndroidBackButton()
+
   return (
     <Suspense fallback={<LoadingState fullHeight />}>
       <Routes>

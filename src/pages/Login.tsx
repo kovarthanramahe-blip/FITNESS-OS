@@ -58,7 +58,13 @@ export function Login() {
   const isBusy = loading || isSigningIn
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-bg px-4 py-10">
+    <div
+      className="flex min-h-screen items-center justify-center bg-bg px-4 py-10"
+      style={{
+        paddingTop: 'max(env(safe-area-inset-top, 0px), 2.5rem)',
+        paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 2.5rem)',
+      }}
+    >
       <motion.div variants={scaleIn} initial="hidden" animate="visible" className="w-full max-w-sm">
         <Card elevated padding="lg" className="flex flex-col items-center gap-6 text-center" animate={false}>
           <span className="flex size-14 items-center justify-center rounded-[var(--radius-md)] bg-accent text-text-inverse">

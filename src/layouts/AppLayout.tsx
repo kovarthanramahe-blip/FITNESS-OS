@@ -8,6 +8,7 @@ import { BadgeUnlockToast } from '@/components/gamification/BadgeUnlockToast'
 import { pageTransition } from '@/animations/variants'
 import { useCloudSync } from '@/lib/cloudSync'
 import { useGamificationSync } from '@/hooks/useGamificationSync'
+import { useLocalStorageFailureToast } from '@/hooks/useLocalStorageFailureToast'
 import type { Badge } from '@/types/gamification'
 
 const BADGE_TOAST_DURATION_MS = 5000
@@ -38,9 +39,10 @@ export function AppLayout() {
 
   useCloudSync()
   useGamificationSync(handleBadgesUnlocked)
+  useLocalStorageFailureToast()
 
   return (
-    <div className="min-h-screen bg-bg">
+    <div className="min-h-screen bg-bg" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <Sidebar />
       <div className="lg:pl-64">
         <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">

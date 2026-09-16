@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { onStorageFailure, resetStorageHealthForTests } from '@/lib/localStorageHealth'
 import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addMeasurement,
@@ -177,5 +178,48 @@ describe('mergeProgressFromCloud', () => {
     mergeProgressFromCloud({ weightLogs: [], weightGoal: cloudGoal, measurements: [] })
 
     expect(getProgressState().weightGoal).toEqual(cloudGoal)
+  })
+})
+
+describe('local persistence', () => {
+  beforeEach(() => {
+    resetStorageHealthForTests()
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it('a successful write behaves exactly as before: the mutation is readable back from localStorage', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+
+    const raw = window.localStorage.getItem('fitness-os:progress-store:v1')
+    expect(raw).not.toBeNull()
+    const persisted = JSON.parse(raw!) as { weightLogs: unknown[] }
+    expect(persisted.weightLogs).toEqual(getProgressState().weightLogs)
+  })
+
+  it('a failed localStorage write never crashes the mutation, and the in-memory state still updates', () => {
+    const before = getProgressState().weightLogs.length
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+
+    expect(() => addWeightLog({ date: '2024-06-01', weightKg: 80 })).not.toThrow()
+
+    expect(getProgressState().weightLogs).toHaveLength(before + 1)
+  })
+
+  it('a failed write notifies exactly once via the shared storage-health channel', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+    const listener = vi.fn()
+    onStorageFailure(listener)
+
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    addWeightLog({ date: '2024-06-02', weightKg: 79.5 })
+
+    expect(listener).toHaveBeenCalledTimes(1)
   })
 })
