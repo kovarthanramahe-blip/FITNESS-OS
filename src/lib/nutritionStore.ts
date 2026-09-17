@@ -181,6 +181,23 @@ export function mergeNutritionFromCloud(cloud: NutritionCloudSnapshot): { localO
 }
 
 /**
+ * One-time cleanup for the local-duplicate bug fixed alongside
+ * `mapFoodEntryRow` (see mapPersonalRecordRow's doc comment in
+ * cloud/mappers.ts for the full mechanism). `serverIds` are raw
+ * `food_entries.id` values — never a `client_entry_id` — so a local
+ * entry's id can only be a member of that set if it's a leftover pre-fix
+ * duplicate. Safe to call on every hydration: a no-op once nothing matches.
+ */
+export function purgeLegacyServerIdFoodEntries(serverIds: string[]): FoodEntry[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.entries.filter((entry) => serverIdSet.has(entry.id))
+  if (removed.length === 0) return []
+  setState((current) => ({ ...current, entries: current.entries.filter((entry) => !serverIdSet.has(entry.id)) }))
+  return removed
+}
+
+/**
  * Wipes all nutrition data for the current scope back to its clean initial
  * state (used by both tests and the production "Reset Fitness Data"
  * setting) and notifies subscribers so any mounted UI updates immediately.

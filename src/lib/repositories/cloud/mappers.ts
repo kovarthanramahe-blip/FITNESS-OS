@@ -23,9 +23,30 @@ export function mapWorkoutSessionRow(row: Row<'workout_sessions'>): WorkoutHisto
   }
 }
 
+/**
+ * Every "id" mapper below (personal records, weight logs, measurements,
+ * food entries, habits, habit entries, water logs) returns the row's
+ * `client_*_id` column — the id the local store generated — rather than
+ * `row.id` (Supabase's own server-generated primary key).
+ *
+ * `client_*_id` is what every `mergeXFromCloud` function compares against
+ * local state to decide "have I already got this one." If this returned
+ * the server id instead, a record round-tripped through the cloud once
+ * would come back with a *different* id than the local copy that's still
+ * sitting in state — so the merge would treat it as a brand-new local-only
+ * record and keep both, duplicating it. Since the server id never changes
+ * but the client id is generated fresh only once, matching on the wrong
+ * one duplicates every already-synced record on the very next hydration
+ * (e.g. the next time the app is opened) and the duplicate then persists to
+ * localStorage. `client_*_id` is stable across every sync because it's
+ * never regenerated once created, which is exactly the identity a merge
+ * needs. (workout_sessions/personal xp_events/earned_badges/
+ * challenge_completions already do this correctly — see
+ * mapWorkoutSessionRow's `sessionId`, mapXpEventRow, mapEarnedBadgeRow.)
+ */
 export function mapPersonalRecordRow(row: Row<'personal_records'>): PersonalRecord {
   return {
-    id: row.id,
+    id: row.client_record_id,
     exercise: row.exercise,
     exerciseId: row.exercise_id ?? undefined,
     weightKg: row.weight_kg,
@@ -38,7 +59,7 @@ export function mapPersonalRecordRow(row: Row<'personal_records'>): PersonalReco
 
 export function mapWeightLogRow(row: Row<'weight_logs'>): WeightLog {
   return {
-    id: row.id,
+    id: row.client_log_id,
     date: row.log_date,
     weightKg: row.weight_kg,
     note: row.note ?? undefined,
@@ -55,7 +76,7 @@ export function mapWeightGoalRow(row: Row<'weight_goals'>): WeightGoal {
 
 export function mapMeasurementRow(row: Row<'body_measurements'>): BodyMeasurement {
   return {
-    id: row.id,
+    id: row.client_measurement_id,
     type: row.measurement_type,
     date: row.log_date,
     value: row.value,
@@ -76,7 +97,7 @@ export function mapNutritionGoalRow(row: Row<'nutrition_goals'>): NutritionGoal 
 
 export function mapFoodEntryRow(row: Row<'food_entries'>): FoodEntry {
   return {
-    id: row.id,
+    id: row.client_entry_id,
     foodId: row.food_id,
     foodName: row.food_name,
     meal: row.meal as MealType,
@@ -104,7 +125,7 @@ function mapHabitFrequency(row: Row<'habits'>): HabitSchedule {
 
 export function mapHabitRow(row: Row<'habits'>): Habit {
   return {
-    id: row.id,
+    id: row.client_habit_id,
     name: row.name,
     description: row.description ?? undefined,
     icon: row.icon as HabitIconKey,
@@ -119,10 +140,21 @@ export function mapHabitRow(row: Row<'habits'>): Habit {
   }
 }
 
-export function mapHabitEntryRow(row: Row<'habit_entries'>): HabitEntry {
+/**
+ * `habit_entries.habit_id` is the server-side foreign key — Supabase's own
+ * `habits.id`, not the client habit id the rest of the app (and
+ * `mapHabitRow`, above) uses. `clientHabitIdByServerId` resolves it back to
+ * the stable client id so a merged-in entry's `habitId` actually matches
+ * the `Habit.id` it belongs to (see `createCloudHabitRepository.getEntries`,
+ * which builds this map from a parallel `habits` read). The fallback to the
+ * raw server id only guards against a dangling reference that shouldn't
+ * exist given the table's own foreign key constraint; it never masks the
+ * common case.
+ */
+export function mapHabitEntryRow(row: Row<'habit_entries'>, clientHabitIdByServerId: Map<string, string>): HabitEntry {
   return {
-    id: row.id,
-    habitId: row.habit_id,
+    id: row.client_entry_id,
+    habitId: clientHabitIdByServerId.get(row.habit_id) ?? row.habit_id,
     date: row.log_date,
     completedAt: row.completed_at,
   }
@@ -137,7 +169,7 @@ export function mapWaterGoalRow(row: Row<'water_goals'>): WaterGoal {
 
 export function mapWaterLogRow(row: Row<'water_logs'>): WaterLog {
   return {
-    id: row.id,
+    id: row.client_log_id,
     date: row.log_date,
     amountMl: row.amount_ml,
     createdAt: row.created_at,

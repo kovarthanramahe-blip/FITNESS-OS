@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mapFoodEntryRow } from '@/lib/repositories/cloud/mappers'
 import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addFoodEntry,
@@ -10,6 +11,7 @@ import {
   getNutritionGoals,
   getNutritionState,
   mergeNutritionFromCloud,
+  purgeLegacyServerIdFoodEntries,
   resetNutritionStoreForTests,
   setNutritionGoals,
 } from './nutritionStore'
@@ -198,5 +200,131 @@ describe('mergeNutritionFromCloud', () => {
     const cloudGoal = { dailyCalories: 2500, proteinGrams: 180, carbohydrateGrams: 250, fatGrams: 80 }
     mergeNutritionFromCloud({ entries: [], goal: cloudGoal })
     expect(getNutritionState().goal).toEqual(cloudGoal)
+  })
+
+  // Regression for the double-counting bug: a food entry already pushed to
+  // the cloud comes back through the real mapper keyed by `client_entry_id`
+  // (the local id), never the server row id — feeding `mapFoodEntryRow`'s
+  // actual output in here is what makes this test fail against the old
+  // `id: row.id` mapper (duplicates on the very next hydration/app-reopen)
+  // and pass against the fix.
+  it('hydrating the same already-synced food entry repeatedly (closing/reopening the app) never duplicates it', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const localEntryId = getNutritionState().entries[0]!.id
+
+    const cloudEntry = mapFoodEntryRow({
+      id: 'server-generated-uuid',
+      user_id: 'user-merge-test',
+      client_entry_id: localEntryId,
+      food_id: SAMPLE_ENTRY.foodId,
+      food_name: SAMPLE_ENTRY.foodName,
+      meal: SAMPLE_ENTRY.meal,
+      quantity: SAMPLE_ENTRY.quantity,
+      serving_unit: SAMPLE_ENTRY.servingUnit,
+      calories: SAMPLE_ENTRY.calories,
+      protein: SAMPLE_ENTRY.protein,
+      carbohydrates: SAMPLE_ENTRY.carbohydrates,
+      fat: SAMPLE_ENTRY.fat,
+      fiber: SAMPLE_ENTRY.fiber,
+      log_date: SAMPLE_ENTRY.date,
+      created_at: '2024-06-01T00:00:00.000Z',
+    })
+
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+    expect(getNutritionState().entries).toHaveLength(1)
+
+    // Close the app and reopen it (repeatedly) — the count must never grow.
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+
+    expect(getNutritionState().entries).toHaveLength(1)
+    expect(getNutritionState().entries[0]!.id).toBe(localEntryId)
+  })
+})
+
+describe('purgeLegacyServerIdFoodEntries (one-time local-duplicate cleanup)', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-purge-test')
+    resetNutritionStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  // TEST A
+  it('does nothing for a fresh store with no entries at all', () => {
+    expect(purgeLegacyServerIdFoodEntries(['server-uuid'])).toEqual([])
+    expect(getNutritionState().entries).toEqual([])
+  })
+
+  // TEST B
+  it('removes a legacy server-id-keyed food entry while keeping the canonical client-id copy', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const canonical = getNutritionState().entries[0]!
+    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null })
+    expect(getNutritionState().entries).toHaveLength(2)
+
+    const removed = purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
+
+    expect(removed).toEqual([{ ...canonical, id: 'server-generated-uuid' }])
+    expect(getNutritionState().entries).toEqual([canonical])
+  })
+
+  // TEST C
+  it('running the purge twice makes no further changes the second time', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const canonical = getNutritionState().entries[0]!
+    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null })
+
+    purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
+    const secondRun = purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
+
+    expect(secondRun).toEqual([])
+    expect(getNutritionState().entries).toEqual([canonical])
+  })
+
+  // TEST D
+  it('never removes two legitimate entries that merely look alike', () => {
+    const entryA = { ...SAMPLE_ENTRY, id: 'food-client-a', createdAt: '2024-06-01T08:00:00.000Z' }
+    const entryB = { ...SAMPLE_ENTRY, id: 'food-client-b', createdAt: '2024-06-01T08:00:00.000Z' }
+    mergeNutritionFromCloud({ entries: [entryA, entryB], goal: null })
+
+    const removed = purgeLegacyServerIdFoodEntries(['unrelated-server-uuid'])
+
+    expect(removed).toEqual([])
+    expect(getNutritionState().entries.map((e) => e.id).sort()).toEqual(['food-client-a', 'food-client-b'])
+  })
+
+  // TEST E
+  it('never removes a local-only entry whose id was never seen on the server', () => {
+    addFoodEntry(SAMPLE_ENTRY)
+    const before = getNutritionState().entries
+
+    purgeLegacyServerIdFoodEntries(['a-server-uuid-that-is-not-this-record'])
+
+    expect(getNutritionState().entries).toBe(before)
+  })
+})
+
+describe('local persistence survives closing and reopening the app without duplicating records', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows entries', async () => {
+    vi.resetModules()
+    const first = await import('./nutritionStore')
+    first.resetNutritionStoreForTests()
+    first.addFoodEntry(SAMPLE_ENTRY)
+    const afterFirstOpen = first.getNutritionState().entries.length
+
+    vi.resetModules()
+    const second = await import('./nutritionStore')
+    expect(second.getNutritionState().entries).toHaveLength(afterFirstOpen)
+
+    vi.resetModules()
+    const third = await import('./nutritionStore')
+    expect(third.getNutritionState().entries).toHaveLength(afterFirstOpen)
   })
 })

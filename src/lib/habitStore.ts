@@ -263,6 +263,72 @@ export function mergeHabitFromCloud(cloud: HabitCloudSnapshot): {
 }
 
 /**
+ * One-time cleanup for the local-duplicate bug fixed alongside
+ * `mapHabitRow` (see mapPersonalRecordRow's doc comment in
+ * cloud/mappers.ts for the full mechanism). `serverIds` are raw
+ * `habits.id` values — never a `client_habit_id` — so a local habit's id
+ * can only be a member of that set if it's a leftover pre-fix duplicate.
+ * Safe to call on every hydration: a no-op once nothing matches.
+ */
+export function purgeLegacyServerIdHabits(serverIds: string[]): Habit[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.habits.filter((habit) => serverIdSet.has(habit.id))
+  if (removed.length === 0) return []
+  setState((current) => ({ ...current, habits: current.habits.filter((habit) => !serverIdSet.has(habit.id)) }))
+  return removed
+}
+
+/**
+ * See `purgeLegacyServerIdHabits` — same mechanism for habit entries,
+ * `entryServerIds` being raw `habit_entries.id` values. Also repairs a
+ * second, distinct artifact of the same pre-fix bug: the old
+ * `mapHabitEntryRow` set a hydrated entry's `habitId` to the *habit's* raw
+ * server id (its foreign key) instead of the habit's client id, so a
+ * surviving entry can still point at a habit id that's about to be purged
+ * by `purgeLegacyServerIdHabits`. `habitServerIdToClientId` (from
+ * `getHabitServerIdToClientId`) re-points any entry whose `habitId` is
+ * still one of those legacy server habit ids back to the canonical client
+ * habit id — an entry whose `habitId` is already a client id (the normal,
+ * post-fix case) is never touched, since it won't be a key in that map.
+ */
+export function purgeLegacyServerIdHabitEntries(
+  entryServerIds: string[],
+  habitServerIdToClientId: Record<string, string>,
+): HabitEntry[] {
+  const entryServerIdSet = new Set(entryServerIds)
+  const hasHabitIdRepoints = Object.keys(habitServerIdToClientId).length > 0
+  if (entryServerIdSet.size === 0 && !hasHabitIdRepoints) return []
+
+  const removed = state.entries.filter((entry) => entryServerIdSet.has(entry.id))
+  const needsRepoint = state.entries.some(
+    (entry) => !entryServerIdSet.has(entry.id) && habitServerIdToClientId[entry.habitId] !== undefined,
+  )
+  if (removed.length === 0 && !needsRepoint) return []
+
+  setState((current) => ({
+    ...current,
+    entries: current.entries
+      .filter((entry) => !entryServerIdSet.has(entry.id))
+      .map((entry) => {
+        const canonicalHabitId = habitServerIdToClientId[entry.habitId]
+        return canonicalHabitId ? { ...entry, habitId: canonicalHabitId } : entry
+      }),
+  }))
+  return removed
+}
+
+/** See `purgeLegacyServerIdHabits` — same mechanism, for water logs. */
+export function purgeLegacyServerIdWaterLogs(serverIds: string[]): WaterLog[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.waterLogs.filter((log) => serverIdSet.has(log.id))
+  if (removed.length === 0) return []
+  setState((current) => ({ ...current, waterLogs: current.waterLogs.filter((log) => !serverIdSet.has(log.id)) }))
+  return removed
+}
+
+/**
  * Wipes all habit/water data for the current scope back to its clean
  * initial state (used by both tests and the production "Reset Fitness
  * Data" setting) and notifies subscribers so any mounted UI updates

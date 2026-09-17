@@ -429,6 +429,32 @@ export function mergeWorkoutFromCloud(cloud: WorkoutCloudSnapshot): { localOnlyP
 }
 
 /**
+ * One-time cleanup for the local-duplicate bug fixed alongside
+ * `mapPersonalRecordRow` (see its doc comment): before the fix, a personal
+ * record already pushed to the cloud came back on the next hydration keyed
+ * by Supabase's own server-generated row id instead of the original
+ * client-generated id, so both ended up sitting in `personalRecords` at
+ * once. `serverIds` are the raw `personal_records.id` values for this
+ * user — never a `client_record_id` — so a local record's id can only ever
+ * be a member of that set if it's exactly this kind of leftover duplicate;
+ * nothing else could produce that id locally. Safe to call on every
+ * hydration: once removed, nothing will match again, making repeat calls a
+ * no-op (and a no-op skips `setState` entirely, so it never re-persists or
+ * re-notifies subscribers for nothing).
+ */
+export function purgeLegacyServerIdPersonalRecords(serverIds: string[]): PersonalRecord[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.personalRecords.filter((record) => serverIdSet.has(record.id))
+  if (removed.length === 0) return []
+  setState((current) => ({
+    ...current,
+    personalRecords: current.personalRecords.filter((record) => !serverIdSet.has(record.id)),
+  }))
+  return removed
+}
+
+/**
  * Wipes all workout data for the current scope back to its clean initial
  * state (used by both tests and the production "Reset Fitness Data"
  * setting) and notifies subscribers so any mounted UI updates immediately.

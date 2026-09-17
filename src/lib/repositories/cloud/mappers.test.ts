@@ -74,9 +74,26 @@ describe('cloud row mappers', () => {
     expect(record.type).toBe('heaviestWeight')
   })
 
-  it('maps weight log, weight goal and measurement rows', () => {
-    expect(mapWeightLogRow({ id: 'w1', user_id: 'u1', client_log_id: 'c1', log_date: '2024-06-01', weight_kg: 80, note: null, created_at: '' })).toEqual({
-      id: 'w1',
+  it('maps a record\'s id from client_record_id, not the server row id — this is what makes re-syncing idempotent instead of duplicating (see mapPersonalRecordRow doc comment)', () => {
+    const record = mapPersonalRecordRow({
+      id: 'server-generated-uuid',
+      user_id: 'u1',
+      client_record_id: 'pr-local-1',
+      exercise: 'Squat',
+      exercise_id: 'squat',
+      weight_kg: 100,
+      reps: 5,
+      record_date: '2024-06-01T00:00:00.000Z',
+      record_type: 'heaviestWeight',
+      estimated_one_rep_max: null,
+      created_at: '2024-06-01T00:00:00.000Z',
+    })
+    expect(record.id).toBe('pr-local-1')
+  })
+
+  it('maps weight log, weight goal and measurement rows, keying each id on its client_*_id column rather than the server row id (see mapPersonalRecordRow doc comment)', () => {
+    expect(mapWeightLogRow({ id: 'server-generated-uuid', user_id: 'u1', client_log_id: 'c1', log_date: '2024-06-01', weight_kg: 80, note: null, created_at: '' })).toEqual({
+      id: 'c1',
       date: '2024-06-01',
       weightKg: 80,
       note: undefined,
@@ -88,7 +105,7 @@ describe('cloud row mappers', () => {
 
     expect(
       mapMeasurementRow({
-        id: 'm1',
+        id: 'server-generated-uuid',
         user_id: 'u1',
         client_measurement_id: 'c1',
         measurement_type: 'Waist',
@@ -98,7 +115,7 @@ describe('cloud row mappers', () => {
         note: null,
         created_at: '',
       }),
-    ).toEqual({ id: 'm1', type: 'Waist', date: '2024-06-01', value: 80, unit: 'cm', note: undefined })
+    ).toEqual({ id: 'c1', type: 'Waist', date: '2024-06-01', value: 80, unit: 'cm', note: undefined })
   })
 
   it('maps nutrition goal and food entry rows', () => {
@@ -116,7 +133,7 @@ describe('cloud row mappers', () => {
 
     expect(
       mapFoodEntryRow({
-        id: 'f1',
+        id: 'server-generated-uuid',
         user_id: 'u1',
         client_entry_id: 'c1',
         food_id: 'food-1',
@@ -132,7 +149,30 @@ describe('cloud row mappers', () => {
         log_date: '2024-06-01',
         created_at: '2024-06-01T08:00:00.000Z',
       }),
-    ).toMatchObject({ id: 'f1', foodName: 'Oats', meal: 'breakfast', date: '2024-06-01' })
+    ).toMatchObject({ id: 'c1', foodName: 'Oats', meal: 'breakfast', date: '2024-06-01' })
+  })
+
+  it("maps a habit's id from client_habit_id, not the server row id", () => {
+    const habit = mapHabitRow({
+      id: 'server-generated-uuid',
+      user_id: 'u1',
+      client_habit_id: 'habit-local-1',
+      name: 'Stretch',
+      description: null,
+      icon: 'sparkles',
+      category: 'wellness',
+      frequency_type: 'daily',
+      frequency_days: null,
+      frequency_times_per_week: null,
+      target: 1,
+      unit: null,
+      reminder_enabled: false,
+      reminder_time: null,
+      active: true,
+      created_at: '2024-01-01T00:00:00.000Z',
+      updated_at: '2024-01-01T00:00:00.000Z',
+    })
+    expect(habit.id).toBe('habit-local-1')
   })
 
   it('maps habit rows, reconstructing each frequency type', () => {
@@ -164,10 +204,16 @@ describe('cloud row mappers', () => {
     ).toEqual({ type: 'weekly', timesPerWeek: 4 })
   })
 
-  it('maps habit entry, water goal and water log rows', () => {
-    expect(mapHabitEntryRow({ id: 'e1', user_id: 'u1', habit_id: 'h1', client_entry_id: 'c1', log_date: '2024-06-01', completed_at: 'x' })).toEqual({
-      id: 'e1',
-      habitId: 'h1',
+  it('maps habit entry, water goal and water log rows, keying ids on client_*_id and resolving habitId through the server-id map', () => {
+    const clientHabitIdByServerId = new Map([['server-habit-1', 'habit-local-1']])
+    expect(
+      mapHabitEntryRow(
+        { id: 'server-generated-uuid', user_id: 'u1', habit_id: 'server-habit-1', client_entry_id: 'c1', log_date: '2024-06-01', completed_at: 'x' },
+        clientHabitIdByServerId,
+      ),
+    ).toEqual({
+      id: 'c1',
+      habitId: 'habit-local-1',
       date: '2024-06-01',
       completedAt: 'x',
     })
@@ -177,12 +223,20 @@ describe('cloud row mappers', () => {
       preferredUnit: 'l',
     })
 
-    expect(mapWaterLogRow({ id: 'w1', user_id: 'u1', client_log_id: 'c1', log_date: '2024-06-01', amount_ml: 250, created_at: 'x' })).toEqual({
-      id: 'w1',
+    expect(mapWaterLogRow({ id: 'server-generated-uuid', user_id: 'u1', client_log_id: 'c1', log_date: '2024-06-01', amount_ml: 250, created_at: 'x' })).toEqual({
+      id: 'c1',
       date: '2024-06-01',
       amountMl: 250,
       createdAt: 'x',
     })
+  })
+
+  it('mapHabitEntryRow falls back to the raw server habit_id if the map has no entry for it (defensive — should not happen given the FK)', () => {
+    const entry = mapHabitEntryRow(
+      { id: 'e1', user_id: 'u1', habit_id: 'unmapped-server-id', client_entry_id: 'c1', log_date: '2024-06-01', completed_at: 'x' },
+      new Map(),
+    )
+    expect(entry.habitId).toBe('unmapped-server-id')
   })
 
   it('maps xp event and earned badge rows', () => {

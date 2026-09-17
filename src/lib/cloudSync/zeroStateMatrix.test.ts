@@ -48,14 +48,17 @@ beforeEach(() => {
 describe('zero-state matrix: local + cloud combinations never reintroduce mock data', () => {
   it('local=empty, cloud=empty -> stays empty for every domain (no mock/demo data leaks in)', async () => {
     vi.doMock('@/lib/repositories/cloud', () => ({
-      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [] }),
-      createCloudProgressRepository: () => ({ getWeightLogs: async () => [], getWeightGoal: async () => null, getMeasurements: async () => [] }),
-      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null }),
+      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [], getPersonalRecordServerIds: async () => [] }),
+      createCloudProgressRepository: () => ({ getWeightLogs: async () => [], getWeightGoal: async () => null, getMeasurements: async () => [], getWeightLogServerIds: async () => [], getMeasurementServerIds: async () => [] }),
+      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null, getFoodEntryServerIds: async () => [] }),
       createCloudHabitRepository: () => ({
         getHabits: async () => [],
         getEntries: async () => [],
         getWaterLogs: async () => [],
         getWaterGoal: async () => null,
+        getHabitServerIdToClientId: async () => ({}),
+        getHabitEntryServerIds: async () => [],
+        getWaterLogServerIds: async () => [],
       }),
       createCloudGamificationRepository: () => ({
         getXpEvents: async () => [],
@@ -101,18 +104,23 @@ describe('zero-state matrix: local + cloud combinations never reintroduce mock d
 
   it('local=empty, cloud=data -> the cloud data hydrates in correctly', async () => {
     vi.doMock('@/lib/repositories/cloud', () => ({
-      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [] }),
+      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [], getPersonalRecordServerIds: async () => [] }),
       createCloudProgressRepository: () => ({
         getWeightLogs: async () => [{ id: 'cloud-w1', date: '2024-06-01', weightKg: 79.5 }],
         getWeightGoal: async () => null,
         getMeasurements: async () => [],
+        getWeightLogServerIds: async () => [],
+        getMeasurementServerIds: async () => [],
       }),
-      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null }),
+      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null, getFoodEntryServerIds: async () => [] }),
       createCloudHabitRepository: () => ({
         getHabits: async () => [],
         getEntries: async () => [],
         getWaterLogs: async () => [],
         getWaterGoal: async () => null,
+        getHabitServerIdToClientId: async () => ({}),
+        getHabitEntryServerIds: async () => [],
+        getWaterLogServerIds: async () => [],
       }),
       createCloudGamificationRepository: () => ({
         getXpEvents: async () => [],
@@ -137,14 +145,17 @@ describe('zero-state matrix: local + cloud combinations never reintroduce mock d
 
   it('local=data, cloud=empty -> local data is preserved (not wiped by an empty cloud pull)', async () => {
     vi.doMock('@/lib/repositories/cloud', () => ({
-      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [] }),
-      createCloudProgressRepository: () => ({ getWeightLogs: async () => [], getWeightGoal: async () => null, getMeasurements: async () => [] }),
-      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null }),
+      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [], getPersonalRecordServerIds: async () => [] }),
+      createCloudProgressRepository: () => ({ getWeightLogs: async () => [], getWeightGoal: async () => null, getMeasurements: async () => [], getWeightLogServerIds: async () => [], getMeasurementServerIds: async () => [] }),
+      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null, getFoodEntryServerIds: async () => [] }),
       createCloudHabitRepository: () => ({
         getHabits: async () => [],
         getEntries: async () => [],
         getWaterLogs: async () => [],
         getWaterGoal: async () => null,
+        getHabitServerIdToClientId: async () => ({}),
+        getHabitEntryServerIds: async () => [],
+        getWaterLogServerIds: async () => [],
       }),
       createCloudGamificationRepository: () => ({
         getXpEvents: async () => [],
@@ -170,7 +181,7 @@ describe('zero-state matrix: local + cloud combinations never reintroduce mock d
 
   it('local=data, cloud=data (same ids) -> merges without duplicates, cloud wins', async () => {
     vi.doMock('@/lib/repositories/cloud', () => ({
-      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [] }),
+      createCloudWorkoutRepository: () => ({ getHistory: async () => [], getPersonalRecords: async () => [], getPersonalRecordServerIds: async () => [] }),
       createCloudProgressRepository: () => ({
         // Same client id the local store will generate isn't predictable, so
         // this scenario is proven at the store level in progressStore.test.ts's
@@ -180,13 +191,18 @@ describe('zero-state matrix: local + cloud combinations never reintroduce mock d
         getWeightLogs: async () => [],
         getWeightGoal: async () => null,
         getMeasurements: async () => [],
+        getWeightLogServerIds: async () => [],
+        getMeasurementServerIds: async () => [],
       }),
-      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null }),
+      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null, getFoodEntryServerIds: async () => [] }),
       createCloudHabitRepository: () => ({
         getHabits: async () => [],
         getEntries: async () => [],
         getWaterLogs: async () => [],
         getWaterGoal: async () => null,
+        getHabitServerIdToClientId: async () => ({}),
+        getHabitEntryServerIds: async () => [],
+        getWaterLogServerIds: async () => [],
       }),
       createCloudGamificationRepository: () => ({
         getXpEvents: async () => [],

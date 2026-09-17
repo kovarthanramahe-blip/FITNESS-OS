@@ -195,6 +195,37 @@ export function mergeProgressFromCloud(cloud: ProgressCloudSnapshot): {
 }
 
 /**
+ * One-time cleanup for the local-duplicate bug fixed alongside
+ * `mapWeightLogRow`/`mapMeasurementRow` (see mapPersonalRecordRow's doc
+ * comment in cloud/mappers.ts for the full mechanism). `serverIds` are raw
+ * server row ids — never a `client_*_id` — so a local record's id can only
+ * be a member of that set if it's a leftover pre-fix duplicate. Safe to
+ * call on every hydration: a no-op (no `setState`, no re-persist, no
+ * subscriber notification) once nothing matches.
+ */
+export function purgeLegacyServerIdWeightLogs(serverIds: string[]): WeightLog[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.weightLogs.filter((log) => serverIdSet.has(log.id))
+  if (removed.length === 0) return []
+  setState((current) => ({ ...current, weightLogs: current.weightLogs.filter((log) => !serverIdSet.has(log.id)) }))
+  return removed
+}
+
+/** See `purgeLegacyServerIdWeightLogs` — same mechanism, for body measurements. */
+export function purgeLegacyServerIdMeasurements(serverIds: string[]): BodyMeasurement[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.measurements.filter((measurement) => serverIdSet.has(measurement.id))
+  if (removed.length === 0) return []
+  setState((current) => ({
+    ...current,
+    measurements: current.measurements.filter((measurement) => !serverIdSet.has(measurement.id)),
+  }))
+  return removed
+}
+
+/**
  * Wipes all progress data for the current scope back to its clean initial
  * state (used by both tests and the production "Reset Fitness Data"
  * setting) and notifies subscribers so any mounted UI updates immediately.

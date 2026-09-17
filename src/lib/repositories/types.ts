@@ -63,6 +63,15 @@ export interface WorkoutRepositoryWriter {
   /** Upserts the session (by client_session_id) then replaces its exercises/sets — idempotent on retry. */
   saveCompletedSession(session: WorkoutSession, historyEntry: WorkoutHistoryEntry): Promise<void>
   savePersonalRecord(record: PersonalRecord): Promise<void>
+  /**
+   * One-time local-duplicate cleanup support (see docs/SYNC_STRATEGY.md):
+   * the raw `personal_records.id` primary keys for this user — never a
+   * `client_record_id`. A local record's id can only ever equal one of
+   * these if it's a leftover copy from before `mapPersonalRecordRow` was
+   * fixed to key on `client_record_id`; nothing else could produce that id
+   * shape locally.
+   */
+  getPersonalRecordServerIds(): Promise<string[]>
 }
 
 export interface ProgressRepositoryWriter {
@@ -71,12 +80,18 @@ export interface ProgressRepositoryWriter {
   saveWeightGoal(goal: WeightGoal): Promise<void>
   saveMeasurement(measurement: BodyMeasurement): Promise<void>
   deleteMeasurement(clientMeasurementId: string): Promise<void>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getWeightLogServerIds(): Promise<string[]>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getMeasurementServerIds(): Promise<string[]>
 }
 
 export interface NutritionRepositoryWriter {
   saveFoodEntry(entry: FoodEntry): Promise<void>
   deleteFoodEntry(clientEntryId: string): Promise<void>
   saveGoal(goal: NutritionGoal): Promise<void>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getFoodEntryServerIds(): Promise<string[]>
 }
 
 export interface HabitRepositoryWriter {
@@ -88,6 +103,19 @@ export interface HabitRepositoryWriter {
   saveWaterLog(log: WaterLog): Promise<void>
   deleteWaterLog(clientLogId: string): Promise<void>
   saveWaterGoal(goal: WaterGoal): Promise<void>
+  /**
+   * One-time local-duplicate cleanup support: maps every `habits.id`
+   * (server row id) for this user to its `client_habit_id`. Used both to
+   * find legacy server-id-keyed habit duplicates and to re-point any
+   * surviving habit entry whose `habitId` still holds a legacy server habit
+   * id (the old `mapHabitEntryRow` bug — see its doc comment) back to the
+   * canonical client habit id.
+   */
+  getHabitServerIdToClientId(): Promise<Record<string, string>>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getHabitEntryServerIds(): Promise<string[]>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getWaterLogServerIds(): Promise<string[]>
 }
 
 export interface GamificationRepositoryWriter {

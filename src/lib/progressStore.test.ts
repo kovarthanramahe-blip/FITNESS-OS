@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { onStorageFailure, resetStorageHealthForTests } from '@/lib/localStorageHealth'
+import { mapMeasurementRow, mapWeightLogRow } from '@/lib/repositories/cloud/mappers'
 import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addMeasurement,
@@ -8,6 +9,8 @@ import {
   deleteWeightLog,
   getProgressState,
   mergeProgressFromCloud,
+  purgeLegacyServerIdMeasurements,
+  purgeLegacyServerIdWeightLogs,
   resetProgressStoreForTests,
   setWeightGoal,
   updateMeasurement,
@@ -178,6 +181,173 @@ describe('mergeProgressFromCloud', () => {
     mergeProgressFromCloud({ weightLogs: [], weightGoal: cloudGoal, measurements: [] })
 
     expect(getProgressState().weightGoal).toEqual(cloudGoal)
+  })
+
+  // Regression for the double-counting bug: a record already pushed to the
+  // cloud comes back on the next hydration wrapped in a row whose `id` is
+  // Supabase's own server-generated primary key — never the same string as
+  // the local, client-generated id — while `client_log_id`/
+  // `client_measurement_id` carries the original id through unchanged. Only
+  // `mapWeightLogRow`/`mapMeasurementRow` (not this test) decide which one
+  // becomes `WeightLog.id`/`BodyMeasurement.id`; feeding their real output
+  // in here is what makes this test fail against the old
+  // `id: row.id` mapper (which duplicated every already-synced record on
+  // the very next hydration/app-reopen) and pass against the fix.
+  it('hydrating the same already-synced weight log and measurement repeatedly (closing/reopening the app) never duplicates them', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    const localLogId = getProgressState().weightLogs[0]!.id
+    addMeasurement({ type: 'Waist', date: '2024-06-01', value: 82, unit: 'cm' })
+    const localMeasurementId = getProgressState().measurements[0]!.id
+
+    const cloudLog = mapWeightLogRow({
+      id: 'server-generated-uuid-1',
+      user_id: 'user-merge-test',
+      client_log_id: localLogId,
+      log_date: '2024-06-01',
+      weight_kg: 80,
+      note: null,
+      created_at: '2024-06-01T00:00:00.000Z',
+    })
+    const cloudMeasurement = mapMeasurementRow({
+      id: 'server-generated-uuid-2',
+      user_id: 'user-merge-test',
+      client_measurement_id: localMeasurementId,
+      measurement_type: 'Waist',
+      log_date: '2024-06-01',
+      value: 82,
+      unit: 'cm',
+      note: null,
+      created_at: '2024-06-01T00:00:00.000Z',
+    })
+
+    // First hydration after the push round-trip — the cloud copy is the
+    // very same record, so nothing should be added.
+    mergeProgressFromCloud({ weightLogs: [cloudLog], weightGoal: null, measurements: [cloudMeasurement] })
+    expect(getProgressState().weightLogs).toHaveLength(1)
+    expect(getProgressState().measurements).toHaveLength(1)
+
+    // Close the app and reopen it (repeatedly) — the same cloud data comes
+    // back every time; the count must never grow.
+    mergeProgressFromCloud({ weightLogs: [cloudLog], weightGoal: null, measurements: [cloudMeasurement] })
+    mergeProgressFromCloud({ weightLogs: [cloudLog], weightGoal: null, measurements: [cloudMeasurement] })
+
+    expect(getProgressState().weightLogs).toHaveLength(1)
+    expect(getProgressState().weightLogs[0]!.id).toBe(localLogId)
+    expect(getProgressState().measurements).toHaveLength(1)
+    expect(getProgressState().measurements[0]!.id).toBe(localMeasurementId)
+  })
+})
+
+describe('purgeLegacyServerId(WeightLogs|Measurements) (one-time local-duplicate cleanup)', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-purge-test')
+    resetProgressStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  // TEST A
+  it('does nothing for a fresh store with no records at all', () => {
+    expect(purgeLegacyServerIdWeightLogs(['server-uuid'])).toEqual([])
+    expect(purgeLegacyServerIdMeasurements(['server-uuid'])).toEqual([])
+    expect(getProgressState().weightLogs).toEqual([])
+    expect(getProgressState().measurements).toEqual([])
+  })
+
+  // TEST B
+  it('removes a legacy server-id-keyed weight log and measurement while keeping the canonical client-id copies', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    const canonicalLog = getProgressState().weightLogs[0]!
+    addMeasurement({ type: 'Waist', date: '2024-06-01', value: 82, unit: 'cm' })
+    const canonicalMeasurement = getProgressState().measurements[0]!
+
+    mergeProgressFromCloud({
+      weightLogs: [{ ...canonicalLog, id: 'server-log-uuid' }],
+      weightGoal: null,
+      measurements: [{ ...canonicalMeasurement, id: 'server-measurement-uuid' }],
+    })
+    expect(getProgressState().weightLogs).toHaveLength(2)
+    expect(getProgressState().measurements).toHaveLength(2)
+
+    const removedLogs = purgeLegacyServerIdWeightLogs(['server-log-uuid'])
+    const removedMeasurements = purgeLegacyServerIdMeasurements(['server-measurement-uuid'])
+
+    expect(removedLogs).toEqual([{ ...canonicalLog, id: 'server-log-uuid' }])
+    expect(removedMeasurements).toEqual([{ ...canonicalMeasurement, id: 'server-measurement-uuid' }])
+    expect(getProgressState().weightLogs).toEqual([canonicalLog])
+    expect(getProgressState().measurements).toEqual([canonicalMeasurement])
+  })
+
+  // TEST C
+  it('running the purge twice makes no further changes the second time', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    const canonicalLog = getProgressState().weightLogs[0]!
+    mergeProgressFromCloud({ weightLogs: [{ ...canonicalLog, id: 'server-log-uuid' }], weightGoal: null, measurements: [] })
+
+    purgeLegacyServerIdWeightLogs(['server-log-uuid'])
+    const secondRun = purgeLegacyServerIdWeightLogs(['server-log-uuid'])
+
+    expect(secondRun).toEqual([])
+    expect(getProgressState().weightLogs).toEqual([canonicalLog])
+  })
+
+  // TEST D
+  it('never removes two legitimate weight logs that merely look alike', () => {
+    const logA = { id: 'weight-client-a', date: '2024-06-01', weightKg: 80 }
+    const logB = { id: 'weight-client-b', date: '2024-06-01', weightKg: 80 }
+    mergeProgressFromCloud({ weightLogs: [logA, logB], weightGoal: null, measurements: [] })
+
+    const removed = purgeLegacyServerIdWeightLogs(['unrelated-server-uuid'])
+
+    expect(removed).toEqual([])
+    expect(getProgressState().weightLogs.map((l) => l.id).sort()).toEqual(['weight-client-a', 'weight-client-b'])
+  })
+
+  // TEST E
+  it('never removes a local-only weight log or measurement whose id was never seen on the server', () => {
+    addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    addMeasurement({ type: 'Waist', date: '2024-06-01', value: 82, unit: 'cm' })
+    const logsBefore = getProgressState().weightLogs
+    const measurementsBefore = getProgressState().measurements
+
+    purgeLegacyServerIdWeightLogs(['a-server-uuid-that-is-not-this-record'])
+    purgeLegacyServerIdMeasurements(['a-server-uuid-that-is-not-this-record'])
+
+    expect(getProgressState().weightLogs).toBe(logsBefore)
+    expect(getProgressState().measurements).toBe(measurementsBefore)
+  })
+})
+
+describe('local persistence survives closing and reopening the app without duplicating records', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows weightLogs or measurements', async () => {
+    vi.resetModules()
+    const first = await import('./progressStore')
+    first.resetProgressStoreForTests()
+    first.addWeightLog({ date: '2024-06-01', weightKg: 80 })
+    first.addMeasurement({ type: 'Waist', date: '2024-06-01', value: 82, unit: 'cm' })
+    const afterFirstOpen = {
+      weightLogs: first.getProgressState().weightLogs.length,
+      measurements: first.getProgressState().measurements.length,
+    }
+
+    // "Close the app": drop the in-memory module entirely. Re-importing it
+    // re-runs `loadPersistedState()` at module init, exactly like a fresh
+    // process reading localStorage on launch.
+    vi.resetModules()
+    const second = await import('./progressStore')
+    expect(second.getProgressState().weightLogs).toHaveLength(afterFirstOpen.weightLogs)
+    expect(second.getProgressState().measurements).toHaveLength(afterFirstOpen.measurements)
+
+    vi.resetModules()
+    const third = await import('./progressStore')
+    expect(third.getProgressState().weightLogs).toHaveLength(afterFirstOpen.weightLogs)
+    expect(third.getProgressState().measurements).toHaveLength(afterFirstOpen.measurements)
   })
 })
 

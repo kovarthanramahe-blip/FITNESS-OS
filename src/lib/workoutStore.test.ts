@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getProgramById } from '@/data/programs'
 import { onStorageFailure, resetStorageHealthForTests } from '@/lib/localStorageHealth'
+import { mapPersonalRecordRow } from '@/lib/repositories/cloud/mappers'
 import { resetStorageScopeForTests, scopedStorageKey, setCurrentUserId } from '@/lib/storageScope'
 import {
   addSet,
@@ -10,6 +11,7 @@ import {
   getCompletedSessionsMostRecentFirst,
   getWorkoutState,
   mergeWorkoutFromCloud,
+  purgeLegacyServerIdPersonalRecords,
   resetWorkoutStoreForTests,
   saveCustomWorkout,
   selectProgram,
@@ -486,6 +488,176 @@ describe('mergeWorkoutFromCloud', () => {
     const cloudVersion = { ...localRecord, weightKg: 70 }
     mergeWorkoutFromCloud({ history: [], personalRecords: [cloudVersion] })
     expect(getWorkoutState().personalRecords).toEqual([cloudVersion])
+  })
+
+  // Regression for the double-counting bug: a personal record already
+  // pushed to the cloud comes back through the real mapper keyed by
+  // `client_record_id` (the local id), never the server row id — feeding
+  // `mapPersonalRecordRow`'s actual output in here is what makes this test
+  // fail against the old `id: row.id` mapper (duplicates on the very next
+  // hydration/app-reopen) and pass against the fix.
+  it('hydrating the same already-synced personal record repeatedly (closing/reopening the app) never duplicates it', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+    const localRecord = getWorkoutState().personalRecords[0]!
+
+    const cloudRecord = mapPersonalRecordRow({
+      id: 'server-generated-uuid',
+      user_id: 'user-merge-test',
+      client_record_id: localRecord.id,
+      exercise: localRecord.exercise,
+      exercise_id: localRecord.exerciseId ?? null,
+      weight_kg: localRecord.weightKg,
+      reps: localRecord.reps,
+      record_date: localRecord.date,
+      record_type: localRecord.type ?? null,
+      estimated_one_rep_max: localRecord.estimatedOneRepMax ?? null,
+      created_at: '2024-06-01T00:00:00.000Z',
+    })
+
+    mergeWorkoutFromCloud({ history: [], personalRecords: [cloudRecord] })
+    expect(getWorkoutState().personalRecords).toHaveLength(1)
+
+    // Close the app and reopen it (repeatedly) — the count must never grow.
+    mergeWorkoutFromCloud({ history: [], personalRecords: [cloudRecord] })
+    mergeWorkoutFromCloud({ history: [], personalRecords: [cloudRecord] })
+
+    expect(getWorkoutState().personalRecords).toHaveLength(1)
+    expect(getWorkoutState().personalRecords[0]!.id).toBe(localRecord.id)
+  })
+})
+
+describe('purgeLegacyServerIdPersonalRecords (one-time local-duplicate cleanup)', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-purge-test')
+    resetWorkoutStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  // TEST A: fresh user, no legacy duplicates.
+  it('does nothing for a fresh store with no records at all', () => {
+    const removed = purgeLegacyServerIdPersonalRecords(['some-server-uuid'])
+    expect(removed).toEqual([])
+    expect(getWorkoutState().personalRecords).toEqual([])
+  })
+
+  // TEST B: old-style duplicate + canonical record present → duplicate removed.
+  it('removes a legacy server-id-keyed record while keeping the canonical client-id one', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+    const canonical = getWorkoutState().personalRecords[0]!
+    const legacyDuplicate = { ...canonical, id: 'server-generated-uuid' }
+    // Simulate the corrupted post-bug state directly: both copies present.
+    mergeWorkoutFromCloud({ history: [], personalRecords: [legacyDuplicate] })
+    expect(getWorkoutState().personalRecords).toHaveLength(2)
+
+    const removed = purgeLegacyServerIdPersonalRecords(['server-generated-uuid'])
+
+    expect(removed).toEqual([legacyDuplicate])
+    expect(getWorkoutState().personalRecords).toEqual([canonical])
+  })
+
+  // TEST C: running the migration twice makes no further changes.
+  it('running the purge twice is a no-op the second time', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+    const canonical = getWorkoutState().personalRecords[0]!
+    mergeWorkoutFromCloud({ history: [], personalRecords: [{ ...canonical, id: 'server-generated-uuid' }] })
+
+    purgeLegacyServerIdPersonalRecords(['server-generated-uuid'])
+    const secondRun = purgeLegacyServerIdPersonalRecords(['server-generated-uuid'])
+
+    expect(secondRun).toEqual([])
+    expect(getWorkoutState().personalRecords).toEqual([canonical])
+  })
+
+  // TEST D: two legitimate records with different client ids but
+  // identical-looking values both survive — the migration never compares
+  // values, only exact id membership in the known-server-id set.
+  it('never removes two legitimate records that merely look alike', () => {
+    const recordA = {
+      id: 'pr-client-id-a',
+      exercise: 'Squat',
+      exerciseId: 'squat',
+      weightKg: 100,
+      reps: 5,
+      date: '2024-06-01',
+      type: 'heaviestWeight' as const,
+    }
+    const recordB = { ...recordA, id: 'pr-client-id-b' }
+    mergeWorkoutFromCloud({ history: [], personalRecords: [recordA, recordB] })
+    expect(getWorkoutState().personalRecords).toHaveLength(2)
+
+    const removed = purgeLegacyServerIdPersonalRecords(['some-unrelated-server-uuid'])
+
+    expect(removed).toEqual([])
+    expect(getWorkoutState().personalRecords.map((r) => r.id).sort()).toEqual(['pr-client-id-a', 'pr-client-id-b'])
+  })
+
+  // TEST E: a genuinely local-only, never-synced record survives.
+  it('never removes a local-only record whose id was never seen on the server', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+    const localOnly = getWorkoutState().personalRecords[0]!
+
+    const removed = purgeLegacyServerIdPersonalRecords(['a-server-uuid-that-is-not-this-record'])
+
+    expect(removed).toEqual([])
+    expect(getWorkoutState().personalRecords).toEqual([localOnly])
+  })
+
+  // TEST M: an existing user with no duplicates is not modified at all —
+  // not even a gratuitous re-persist, since a no-op skips `setState` entirely.
+  it('does not call setState (no re-persist, no subscriber notification) when there is nothing to remove', () => {
+    startSession(sampleWorkout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession!.exercises[0]!.id
+    const setId = getWorkoutState().activeSession!.exercises[0]!.sets[0]!.id
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+    const before = getWorkoutState().personalRecords
+
+    purgeLegacyServerIdPersonalRecords(['unrelated-server-uuid'])
+
+    // Same array reference — proof nothing was ever written back.
+    expect(getWorkoutState().personalRecords).toBe(before)
+  })
+})
+
+describe('local persistence survives closing and reopening the app without duplicating records', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows history or personal records', async () => {
+    vi.resetModules()
+    const first = await import('./workoutStore')
+    first.resetWorkoutStoreForTests()
+    first.startSession(sampleWorkout, 'Intermediate')
+    first.completeSession()
+    const afterFirstOpen = {
+      history: first.getWorkoutState().history.length,
+      personalRecords: first.getWorkoutState().personalRecords.length,
+    }
+
+    vi.resetModules()
+    const second = await import('./workoutStore')
+    expect(second.getWorkoutState().history).toHaveLength(afterFirstOpen.history)
+    expect(second.getWorkoutState().personalRecords).toHaveLength(afterFirstOpen.personalRecords)
+
+    vi.resetModules()
+    const third = await import('./workoutStore')
+    expect(third.getWorkoutState().history).toHaveLength(afterFirstOpen.history)
+    expect(third.getWorkoutState().personalRecords).toHaveLength(afterFirstOpen.personalRecords)
   })
 })
 

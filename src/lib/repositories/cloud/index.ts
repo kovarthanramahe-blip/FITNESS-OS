@@ -129,6 +129,11 @@ export function createCloudWorkoutRepository(userId: string): WorkoutRepository 
         .upsert(toPersonalRecordRow(userId, record), { onConflict: 'user_id,client_record_id' })
       if (error) throw error
     },
+    async getPersonalRecordServerIds() {
+      const { data, error } = await client().from('personal_records').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
   }
 }
 
@@ -187,6 +192,16 @@ export function createCloudProgressRepository(userId: string): ProgressRepositor
         .eq('client_measurement_id', clientMeasurementId)
       if (error) throw error
     },
+    async getWeightLogServerIds() {
+      const { data, error } = await client().from('weight_logs').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
+    async getMeasurementServerIds() {
+      const { data, error } = await client().from('body_measurements').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
   }
 }
 
@@ -222,6 +237,11 @@ export function createCloudNutritionRepository(userId: string): NutritionReposit
         .upsert(toNutritionGoalRow(userId, goal), { onConflict: 'user_id' })
       if (error) throw error
     },
+    async getFoodEntryServerIds() {
+      const { data, error } = await client().from('food_entries').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
   }
 }
 
@@ -233,9 +253,18 @@ export function createCloudHabitRepository(userId: string): HabitRepository & Ha
       return (data ?? []).map(mapHabitRow)
     },
     async getEntries() {
-      const { data, error } = await client().from('habit_entries').select('*').eq('user_id', userId)
-      if (error) throw error
-      return (data ?? []).map(mapHabitEntryRow)
+      // habit_entries.habit_id is the server-side FK, not the client habit
+      // id — resolve it back via a parallel read of habits (see
+      // mapHabitEntryRow's own doc comment for why this matters for merge
+      // correctness).
+      const [{ data: entryRows, error: entryError }, { data: habitRows, error: habitError }] = await Promise.all([
+        client().from('habit_entries').select('*').eq('user_id', userId),
+        client().from('habits').select('*').eq('user_id', userId),
+      ])
+      if (entryError) throw entryError
+      if (habitError) throw habitError
+      const clientHabitIdByServerId = new Map((habitRows ?? []).map((row) => [row.id, row.client_habit_id]))
+      return (entryRows ?? []).map((row) => mapHabitEntryRow(row, clientHabitIdByServerId))
     },
     async getWaterLogs() {
       const { data, error } = await client().from('water_logs').select('*').eq('user_id', userId)
@@ -300,6 +329,21 @@ export function createCloudHabitRepository(userId: string): HabitRepository & Ha
         .from('water_goals')
         .upsert(toWaterGoalRow(userId, goal), { onConflict: 'user_id' })
       if (error) throw error
+    },
+    async getHabitServerIdToClientId() {
+      const { data, error } = await client().from('habits').select('id, client_habit_id').eq('user_id', userId)
+      if (error) throw error
+      return Object.fromEntries((data ?? []).map((row) => [row.id, row.client_habit_id]))
+    },
+    async getHabitEntryServerIds() {
+      const { data, error } = await client().from('habit_entries').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
+    async getWaterLogServerIds() {
+      const { data, error } = await client().from('water_logs').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
     },
   }
 }

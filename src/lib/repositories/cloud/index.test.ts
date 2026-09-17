@@ -77,17 +77,30 @@ describe('cloud repositories', () => {
     const userId = 'user-123'
     await cloud.createCloudWorkoutRepository(userId).getHistory()
     await cloud.createCloudWorkoutRepository(userId).getPersonalRecords()
+    await cloud.createCloudWorkoutRepository(userId).getPersonalRecordServerIds()
     await cloud.createCloudProgressRepository(userId).getWeightLogs()
     await cloud.createCloudProgressRepository(userId).getMeasurements()
+    await cloud.createCloudProgressRepository(userId).getWeightLogServerIds()
+    await cloud.createCloudProgressRepository(userId).getMeasurementServerIds()
     await cloud.createCloudNutritionRepository(userId).getFoodEntries()
+    await cloud.createCloudNutritionRepository(userId).getFoodEntryServerIds()
     await cloud.createCloudHabitRepository(userId).getHabits()
     await cloud.createCloudHabitRepository(userId).getEntries()
     await cloud.createCloudHabitRepository(userId).getWaterLogs()
+    await cloud.createCloudHabitRepository(userId).getHabitServerIdToClientId()
+    await cloud.createCloudHabitRepository(userId).getHabitEntryServerIds()
+    await cloud.createCloudHabitRepository(userId).getWaterLogServerIds()
     await cloud.createCloudGamificationRepository(userId).getXpEvents()
     await cloud.createCloudGamificationRepository(userId).getEarnedBadges()
     await cloud.createCloudGamificationRepository(userId).getCompletedChallengeIds()
 
-    expect(builder.eq.mock.calls.length).toBeGreaterThanOrEqual(11)
+    // Point 11 (multi-user isolation): every one of the new legacy-id
+    // queries above is included in this list, and every single `.eq()`
+    // call across ALL of them — old and new — is scoped to `user_id` and
+    // this exact `userId`, never anything else. There is no code path by
+    // which another user's server ids could enter the set this migration
+    // purges against.
+    expect(builder.eq.mock.calls.length).toBeGreaterThanOrEqual(18)
     for (const call of builder.eq.mock.calls) {
       expect(call).toEqual(['user_id', userId])
     }
@@ -467,6 +480,74 @@ describe('cloud repository writes', () => {
       const upsertCalls = callsFor(fake.calls, 'gamification_profiles', 'upsert')
       expect(upsertCalls[0]?.args[0]).toEqual({ user_id: 'u1', created_at: '2024-06-01T00:00:00.000Z' })
       expect(upsertCalls[0]?.args[1]).toEqual({ onConflict: 'user_id', ignoreDuplicates: true })
+    })
+  })
+
+  describe('legacy local-duplicate cleanup support (one-time migration)', () => {
+    it('getPersonalRecordServerIds reads raw ids scoped by user_id', async () => {
+      const fake = createFakeSupabase({ personal_records: [{ data: [{ id: 's1' }, { id: 's2' }], error: null }] })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudWorkoutRepository } = await import('./index')
+
+      const ids = await createCloudWorkoutRepository('u1').getPersonalRecordServerIds()
+
+      expect(ids).toEqual(['s1', 's2'])
+      expect(callsFor(fake.calls, 'personal_records', 'eq')).toEqual([{ table: 'personal_records', method: 'eq', args: ['user_id', 'u1'] }])
+    })
+
+    it('getWeightLogServerIds and getMeasurementServerIds read raw ids scoped by user_id', async () => {
+      const fake = createFakeSupabase({
+        weight_logs: [{ data: [{ id: 'w1' }], error: null }],
+        body_measurements: [{ data: [{ id: 'm1' }], error: null }],
+      })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudProgressRepository } = await import('./index')
+      const repo = createCloudProgressRepository('u1')
+
+      expect(await repo.getWeightLogServerIds()).toEqual(['w1'])
+      expect(await repo.getMeasurementServerIds()).toEqual(['m1'])
+    })
+
+    it('getFoodEntryServerIds reads raw ids scoped by user_id', async () => {
+      const fake = createFakeSupabase({ food_entries: [{ data: [{ id: 'f1' }], error: null }] })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudNutritionRepository } = await import('./index')
+
+      expect(await createCloudNutritionRepository('u1').getFoodEntryServerIds()).toEqual(['f1'])
+    })
+
+    it('getHabitServerIdToClientId maps every habit row id to its client_habit_id', async () => {
+      const fake = createFakeSupabase({
+        habits: [{ data: [{ id: 'server-h1', client_habit_id: 'client-h1' }, { id: 'server-h2', client_habit_id: 'client-h2' }], error: null }],
+      })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudHabitRepository } = await import('./index')
+
+      expect(await createCloudHabitRepository('u1').getHabitServerIdToClientId()).toEqual({
+        'server-h1': 'client-h1',
+        'server-h2': 'client-h2',
+      })
+    })
+
+    it('getHabitEntryServerIds and getWaterLogServerIds read raw ids scoped by user_id', async () => {
+      const fake = createFakeSupabase({
+        habit_entries: [{ data: [{ id: 'e1' }], error: null }],
+        water_logs: [{ data: [{ id: 'wl1' }], error: null }],
+      })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudHabitRepository } = await import('./index')
+      const repo = createCloudHabitRepository('u1')
+
+      expect(await repo.getHabitEntryServerIds()).toEqual(['e1'])
+      expect(await repo.getWaterLogServerIds()).toEqual(['wl1'])
+    })
+
+    it('propagates an error instead of swallowing it', async () => {
+      const fake = createFakeSupabase({ personal_records: [{ data: null, error: { message: 'RLS denied' } }] })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudWorkoutRepository } = await import('./index')
+
+      await expect(createCloudWorkoutRepository('u1').getPersonalRecordServerIds()).rejects.toEqual({ message: 'RLS denied' })
     })
   })
 
