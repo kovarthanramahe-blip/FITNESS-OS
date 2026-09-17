@@ -5,6 +5,7 @@ import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
 import { DEFAULT_MEASUREMENT_TYPES } from '@/types/progress'
 import type { BodyMeasurement, MeasurementUnit } from '@/types/progress'
+import { getTodayDateString } from '@/utils/dateRange'
 
 export interface MeasurementEntryModalProps {
   isOpen: boolean
@@ -18,10 +19,6 @@ export interface MeasurementEntryModalProps {
 
 const CUSTOM_OPTION = '__custom__'
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export function MeasurementEntryModal({
   isOpen,
   onClose,
@@ -34,7 +31,7 @@ export function MeasurementEntryModal({
 
   const [type, setType] = useState(defaultType ?? typeOptions[0] ?? '')
   const [customType, setCustomType] = useState('')
-  const [date, setDate] = useState(today())
+  const [date, setDate] = useState(getTodayDateString())
   const [value, setValue] = useState('')
   const [unit, setUnit] = useState<MeasurementUnit>('cm')
   const [note, setNote] = useState('')
@@ -51,7 +48,7 @@ export function MeasurementEntryModal({
       const isKnown = typeOptions.includes(initialType)
       setType(isKnown ? initialType : CUSTOM_OPTION)
       setCustomType(isKnown ? '' : initialType)
-      setDate(editingMeasurement?.date ?? today())
+      setDate(editingMeasurement?.date ?? getTodayDateString())
       setValue(editingMeasurement ? String(editingMeasurement.value) : '')
       setUnit(editingMeasurement?.unit ?? 'cm')
       setNote(editingMeasurement?.note ?? '')
@@ -85,7 +82,7 @@ export function MeasurementEntryModal({
             placeholder="e.g. Neck"
           />
         )}
-        <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={today()} />
+        <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={getTodayDateString()} />
         <div className="grid grid-cols-[1fr_auto] gap-3">
           <Input
             label="Value"

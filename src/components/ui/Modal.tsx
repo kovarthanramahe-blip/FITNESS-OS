@@ -1,6 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { X } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { modalContent, modalOverlay } from '@/animations/variants'
 import { cn } from '@/utils/cn'
@@ -17,12 +17,20 @@ export interface ModalProps {
 
 export function Modal({ isOpen, onClose, title, description, children, className }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
+  // Read through a ref so the effect below never needs `onClose` in its
+  // dependency array — see the comment there for why that matters. Updated
+  // in a layout effect rather than during render, since refs aren't meant
+  // to be written while rendering.
+  const onCloseRef = useRef(onClose)
+  useLayoutEffect(() => {
+    onCloseRef.current = onClose
+  })
 
   useEffect(() => {
     if (!isOpen) return
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') onCloseRef.current()
     }
 
     document.addEventListener('keydown', handleKeyDown)
@@ -34,7 +42,16 @@ export function Modal({ isOpen, onClose, title, description, children, className
       document.removeEventListener('keydown', handleKeyDown)
       document.body.style.overflow = overflow
     }
-  }, [isOpen, onClose])
+    // Deliberately just `[isOpen]`: this effect's job is the open/close
+    // transition (focus the dialog once, lock body scroll, wire Escape) —
+    // not something to redo on every render. Callers almost always pass an
+    // inline `onClose`, which is a new function identity every render; with
+    // it in the dependency array, typing into any input inside the dialog
+    // re-ran this effect on every keystroke and `dialogRef.current?.focus()`
+    // yanked focus off that input back onto the dialog container. On
+    // Android that's enough to dismiss the on-screen keyboard, forcing the
+    // user to reopen it after every character.
+  }, [isOpen])
 
   return createPortal(
     <AnimatePresence>

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react'
+import { getProgramById } from '@/data/programs'
 import { mockCompletedSessions, mockWorkoutHistory, seedPersonalRecords } from '@/data/mockWorkoutHistory'
 import { pushCompletedSession, pushPersonalRecord } from '@/lib/cloudSync/push'
 import { persistLocalState } from '@/lib/localStorageHealth'
@@ -17,6 +18,7 @@ import {
   buildHistoryEntry,
   getLastPerformanceForExercise,
   instantiateWorkoutExercises,
+  resolveProgramDay,
 } from '@/utils/workout'
 
 const BASE_STORAGE_KEY = 'fitness-os:workout-store:v1'
@@ -45,6 +47,16 @@ export interface WorkoutStoreState {
   activeSession: WorkoutSession | null
   /** Record ids earned during the current active session — used to build the completion summary. */
   activeSessionPrIds: string[]
+  /**
+   * Whether the active session is the program's scheduled day for
+   * `currentDayIndex` (decided once, in `startSession`, by comparing
+   * workout ids — never names). `completeSession` reads this to decide
+   * whether finishing this session should advance the schedule: training
+   * an alternative or custom workout instead of today's scheduled day
+   * completes and logs normally, but leaves the schedule exactly where it
+   * was, so the scheduled day is still waiting next time.
+   */
+  activeSessionIsScheduled: boolean
   history: WorkoutHistoryEntry[]
   personalRecords: PersonalRecord[]
   customWorkouts: Workout[]
@@ -59,6 +71,7 @@ function createInitialState(): WorkoutStoreState {
     currentDayIndex: 0,
     activeSession: null,
     activeSessionPrIds: [],
+    activeSessionIsScheduled: false,
     history: isAuthenticated ? [] : mockWorkoutHistory,
     personalRecords: isAuthenticated ? [] : seedPersonalRecords,
     customWorkouts: [],
@@ -72,6 +85,7 @@ interface PersistedShape {
   currentDayIndex: number
   activeSession: WorkoutSession | null
   activeSessionPrIds: string[]
+  activeSessionIsScheduled: boolean
   history: WorkoutHistoryEntry[]
   personalRecords: PersonalRecord[]
   customWorkouts: Workout[]
@@ -91,6 +105,7 @@ function loadPersistedState(): WorkoutStoreState {
       currentDayIndex: parsed.currentDayIndex ?? initial.currentDayIndex,
       activeSession: parsed.activeSession ?? initial.activeSession,
       activeSessionPrIds: parsed.activeSessionPrIds ?? initial.activeSessionPrIds,
+      activeSessionIsScheduled: parsed.activeSessionIsScheduled ?? initial.activeSessionIsScheduled,
       history: parsed.history ?? initial.history,
       personalRecords: parsed.personalRecords ?? initial.personalRecords,
       customWorkouts: parsed.customWorkouts ?? initial.customWorkouts,
@@ -107,6 +122,7 @@ function persist(state: WorkoutStoreState): void {
     currentDayIndex: state.currentDayIndex,
     activeSession: state.activeSession,
     activeSessionPrIds: state.activeSessionPrIds,
+    activeSessionIsScheduled: state.activeSessionIsScheduled,
     history: state.history,
     personalRecords: state.personalRecords,
     customWorkouts: state.customWorkouts,
@@ -182,6 +198,21 @@ function withLastPerformanceDefaults(exercises: WorkoutExercise[]): WorkoutExerc
   })
 }
 
+/**
+ * Whether `workout` is the program's scheduled day for `current.currentDayIndex`
+ * — compared by workout id, never by name (two different days can share a
+ * name-ish label, e.g. "Push A" vs "Push B", and a custom workout's id never
+ * collides with a program's). No program selected, or today is a rest /
+ * active-recovery day, both mean "no scheduled workout to match" — so
+ * training anything at all counts as an alternative choice.
+ */
+function isScheduledWorkout(current: WorkoutStoreState, workout: Workout): boolean {
+  const program = current.selectedProgramId ? getProgramById(current.selectedProgramId) : undefined
+  if (!program) return false
+  const scheduledDay = resolveProgramDay(program, current.currentDayIndex)
+  return scheduledDay.type === 'workout' && scheduledDay.workout.id === workout.id
+}
+
 export function startSession(workout: Workout, level: Difficulty): void {
   const exercises = withLastPerformanceDefaults(instantiateWorkoutExercises(workout))
   const session: WorkoutSession = {
@@ -191,11 +222,16 @@ export function startSession(workout: Workout, level: Difficulty): void {
     startedAt: new Date().toISOString(),
     exercises,
   }
-  setState((current) => ({ ...current, activeSession: session, activeSessionPrIds: [] }))
+  setState((current) => ({
+    ...current,
+    activeSession: session,
+    activeSessionPrIds: [],
+    activeSessionIsScheduled: isScheduledWorkout(current, workout),
+  }))
 }
 
 export function discardSession(): void {
-  setState((current) => ({ ...current, activeSession: null, activeSessionPrIds: [] }))
+  setState((current) => ({ ...current, activeSession: null, activeSessionPrIds: [], activeSessionIsScheduled: false }))
 }
 
 export function updateSet(
@@ -324,8 +360,12 @@ export function completeSession(): SessionSummary | null {
     ...current,
     activeSession: null,
     activeSessionPrIds: [],
+    activeSessionIsScheduled: false,
     history: [historyEntry, ...current.history],
-    currentDayIndex: current.currentDayIndex + 1,
+    // Only the scheduled day's completion moves the program forward — an
+    // alternative or custom workout is logged like any other, but leaves
+    // today's scheduled day waiting for next time.
+    currentDayIndex: current.activeSessionIsScheduled ? current.currentDayIndex + 1 : current.currentDayIndex,
     lastCompletedSummary: summary,
   }))
 

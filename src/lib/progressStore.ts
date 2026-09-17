@@ -4,6 +4,7 @@ import { mockWeightGoal, mockWeightLogs } from '@/data/mockWeightLog'
 import { pushMeasurement, pushMeasurementDelete, pushWeightGoal, pushWeightLog, pushWeightLogDelete } from '@/lib/cloudSync/push'
 import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
+import { getTodayDateString } from '@/utils/dateRange'
 import type { BodyMeasurement, WeightGoal, WeightLog } from '@/types/progress'
 
 const BASE_STORAGE_KEY = 'fitness-os:progress-store:v1'
@@ -18,7 +19,7 @@ function createInitialState(): ProgressStoreState {
   if (getCurrentUserId() !== null) {
     return {
       weightLogs: [],
-      weightGoal: { startingWeightKg: 0, targetWeightKg: 0, startDate: new Date().toISOString().slice(0, 10) },
+      weightGoal: { startingWeightKg: 0, targetWeightKg: 0, startDate: getTodayDateString() },
       measurements: [],
     }
   }

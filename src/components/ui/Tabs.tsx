@@ -37,7 +37,10 @@ export function TabList({ className, ...props }: React.ComponentPropsWithoutRef<
     <div
       role="tablist"
       className={cn(
-        'inline-flex items-center gap-1 rounded-[var(--radius-md)] border border-border bg-surface p-1',
+        // max-w-full + overflow-x-auto is purely defensive: it only does anything once a tab
+        // group's labels are wider than their container, in which case it scrolls internally
+        // instead of forcing the whole page to scroll horizontally — invisible otherwise.
+        'inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-[var(--radius-md)] border border-border bg-surface p-1',
         className,
       )}
       {...props}
@@ -62,7 +65,7 @@ export function Tab({ value, children, className }: TabProps) {
       aria-selected={isActive}
       onClick={() => onChange(value)}
       className={cn(
-        'relative rounded-[calc(var(--radius-md)-4px)] px-3.5 py-1.5 text-sm font-medium transition-colors',
+        'relative shrink-0 rounded-[calc(var(--radius-md)-4px)] px-3.5 py-1.5 text-sm font-medium transition-colors',
         isActive ? 'text-text-inverse' : 'text-text-secondary hover:text-text-primary',
         className,
       )}

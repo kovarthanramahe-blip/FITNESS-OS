@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import {
   CartesianGrid,
   Line,
@@ -12,6 +13,19 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import type { ProgressTimeRange, WeightLog } from '@/types/progress'
 import { filterByRange } from '@/utils/progress'
 import { CHART_COLORS, chartTooltipStyle } from '@/components/shared/chartTheme'
+import { parseDateOnly } from '@/utils/dateRange'
+
+/**
+ * Module-level, not component state: the Progress page fully remounts on
+ * every navigation (see AppLayout's route transition), so a `useState`/
+ * `useRef` flag would reset every time and the line-draw animation would
+ * replay on every single revisit, making navigation feel like a reload.
+ * This survives remounts within the same app session, so only the
+ * genuinely first time this chart ever appears gets the entrance
+ * animation — every navigation back to Progress after that renders the
+ * final chart immediately.
+ */
+let hasAnimatedOnce = false
 
 export interface WeightChartProps {
   logs: WeightLog[]
@@ -20,7 +34,7 @@ export interface WeightChartProps {
 }
 
 function formatChartDate(dateIso: string): string {
-  return new Date(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return parseDateOnly(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 interface TooltipPayloadEntry {
@@ -40,6 +54,12 @@ function WeightTooltip({ active, payload, label }: { active?: boolean; payload?:
 }
 
 export function WeightChart({ logs, targetWeightKg, range }: WeightChartProps) {
+  const shouldAnimate = !hasAnimatedOnce
+
+  useEffect(() => {
+    hasAnimatedOnce = true
+  }, [])
+
   const filtered = filterByRange(logs, (log) => log.date, range)
     .slice()
     .sort((a, b) => a.date.localeCompare(b.date))
@@ -95,7 +115,7 @@ export function WeightChart({ logs, targetWeightKg, range }: WeightChartProps) {
             strokeWidth={2.5}
             dot={filtered.length < 15 ? { r: 3, fill: CHART_COLORS.accent, strokeWidth: 0 } : false}
             activeDot={{ r: 5 }}
-            isAnimationActive={filtered.length > 1}
+            isAnimationActive={filtered.length > 1 && shouldAnimate}
           />
         </LineChart>
       </ResponsiveContainer>

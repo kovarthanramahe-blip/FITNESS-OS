@@ -43,9 +43,50 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
+
+        <!-- Health Connect (Phase 8A foundation) — see docs/health-connect-setup.md.
+             Shown when the user taps "why is this data used?" from Health
+             Connect's own permission screen. Required by the Health Connect
+             permission model on every supported Android version:
+             - Android 13 and below: launched via ACTION_SHOW_PERMISSIONS_RATIONALE.
+             - Android 14+: launched via the ViewPermissionUsageActivity alias below. -->
+        <activity
+            android:name=".healthconnect.PermissionsRationaleActivity"
+            android:exported="true"
+            android:label="@string/health_connect_rationale_title">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".healthconnect.ViewPermissionUsageActivity"
+            android:exported="true"
+            android:targetActivity=".healthconnect.PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Health Connect (Phase 8A foundation): read-only, steps + exercise-session
+         only, matching the exact scope requested for this phase. No write,
+         heart rate, sleep, location, nutrition, weight or body-composition
+         permission is requested. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+
+    <!-- Lets the app detect whether the standalone Health Connect app is
+         installed on Android versions where it isn't a built-in system
+         component (Android 9-13). Android 14+ ships Health Connect as part
+         of the platform, so this is only consulted on older versions. -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+    </queries>
 </manifest>

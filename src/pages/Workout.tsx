@@ -8,6 +8,7 @@ import { ExerciseLibrary } from '@/components/workout/ExerciseLibrary'
 import { ProgramSelector } from '@/components/workout/ProgramSelector'
 import { TodayWorkoutPanel } from '@/components/workout/TodayWorkoutPanel'
 import { WorkoutHistoryList } from '@/components/workout/WorkoutHistoryList'
+import { WorkoutSelectionModal } from '@/components/workout/WorkoutSelectionModal'
 import { WorkoutSummaryModal } from '@/components/workout/WorkoutSummaryModal'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
@@ -15,7 +16,7 @@ import { Tab, TabList, Tabs } from '@/components/ui/Tabs'
 import { getProgramById } from '@/data/programs'
 import { dismissSummary, saveCustomWorkout, selectProgram, startSession, useWorkoutStore } from '@/lib/workoutStore'
 import type { Workout as WorkoutTemplate } from '@/types/workout'
-import { resolveProgramDay } from '@/utils/workout'
+import { getProgramWorkoutOptions, resolveProgramDay } from '@/utils/workout'
 
 type WorkoutTab = 'today' | 'programs' | 'exercises' | 'history'
 
@@ -25,12 +26,34 @@ export function Workout() {
 
   const [tab, setTab] = useState<WorkoutTab>('today')
   const [isBuilderOpen, setIsBuilderOpen] = useState(false)
+  const [isSelectionOpen, setIsSelectionOpen] = useState(false)
 
   const program = selectedProgramId ? getProgramById(selectedProgramId) : undefined
   const programDay = program ? resolveProgramDay(program, currentDayIndex) : null
+  const workoutOptions = program ? getProgramWorkoutOptions(program) : []
 
   function handleStartTemplate(workout: WorkoutTemplate) {
     startSession(workout, program?.level ?? 'Intermediate')
+  }
+
+  /**
+   * The scheduled day is only ever a *suggestion* — the user isn't forced
+   * into it. When the program has more than one kind of workout day, tapping
+   * "Start Workout" opens the picker instead of starting the scheduled day
+   * directly; a program with just one workout day has nothing to choose
+   * between, so it still starts immediately as before.
+   */
+  function handleStartToday() {
+    if (workoutOptions.length > 1) {
+      setIsSelectionOpen(true)
+      return
+    }
+    if (programDay?.type === 'workout') handleStartTemplate(programDay.workout)
+  }
+
+  function handleSelectWorkout(workout: WorkoutTemplate) {
+    setIsSelectionOpen(false)
+    handleStartTemplate(workout)
   }
 
   function handleSaveCustomWorkout(workout: WorkoutTemplate) {
@@ -64,10 +87,7 @@ export function Workout() {
             <>
               <motion.div variants={staggerItem}>
                 {programDay ? (
-                  <TodayWorkoutPanel
-                    programDay={programDay}
-                    onStart={() => programDay.type === 'workout' && handleStartTemplate(programDay.workout)}
-                  />
+                  <TodayWorkoutPanel programDay={programDay} onStart={handleStartToday} />
                 ) : (
                   <Card elevated padding="lg" className="text-center text-sm text-text-secondary">
                     Choose a program to see today&rsquo;s workout.
@@ -131,6 +151,16 @@ export function Workout() {
           )}
 
           <CustomWorkoutBuilder isOpen={isBuilderOpen} onClose={() => setIsBuilderOpen(false)} onSave={handleSaveCustomWorkout} />
+          <WorkoutSelectionModal
+            isOpen={isSelectionOpen}
+            onClose={() => setIsSelectionOpen(false)}
+            options={workoutOptions}
+            onSelect={handleSelectWorkout}
+            onCreateCustom={() => {
+              setIsSelectionOpen(false)
+              setIsBuilderOpen(true)
+            }}
+          />
         </motion.div>
       )}
 

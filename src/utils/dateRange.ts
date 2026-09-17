@@ -37,21 +37,25 @@ export function toDateString(date: Date): string {
 }
 
 /**
- * Day of week (0 = Sunday .. 6 = Saturday) for a yyyy-mm-dd date-only string,
- * computed in local time. Parsing the string directly via `new Date(dateStr)`
- * reads it as UTC midnight, which can shift to the previous local day near
- * midnight in negative UTC-offset timezones — this constructs the date from
- * its components instead, so the weekday is never timezone-dependent.
+ * Parses a yyyy-mm-dd date-only string into a local-midnight `Date`.
+ * `new Date(dateStr)` reads the same string as UTC midnight instead, which
+ * silently shifts the calendar day (and its weekday) by one for any user
+ * whose local timezone is behind UTC — this constructs the date from its
+ * y/m/d components instead, so the result is never timezone-dependent.
  */
-export function getDayOfWeek(dateStr: string): number {
+export function parseDateOnly(dateStr: string): Date {
   const [year, month, day] = dateStr.split('-').map(Number)
-  return new Date(year!, (month ?? 1) - 1, day).getDay()
+  return new Date(year!, (month ?? 1) - 1, day)
+}
+
+/** Day of week (0 = Sunday .. 6 = Saturday) for a yyyy-mm-dd date-only string, computed in local time. */
+export function getDayOfWeek(dateStr: string): number {
+  return parseDateOnly(dateStr).getDay()
 }
 
 /** Adds (or subtracts, for negative values) whole days to a date-only string. */
 export function addDaysToDateString(dateStr: string, days: number): string {
-  const [year, month, day] = dateStr.split('-').map(Number)
-  const date = new Date(year!, (month ?? 1) - 1, day)
+  const date = parseDateOnly(dateStr)
   date.setDate(date.getDate() + days)
   return toDateString(date)
 }

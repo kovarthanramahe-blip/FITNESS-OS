@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
 import { Tab, TabList, Tabs } from '@/components/ui/Tabs'
 import { MeasurementsTab } from '@/components/progress/MeasurementsTab'
+import { ProgressCalendarCard } from '@/components/progress/ProgressCalendarCard'
 import { StrengthTab } from '@/components/progress/StrengthTab'
 import { WeightTab } from '@/components/progress/WeightTab'
 import { WorkoutsTab } from '@/components/progress/WorkoutsTab'
@@ -24,6 +25,10 @@ export function Progress() {
       <motion.div variants={staggerItem}>
         <h1 className="font-display text-2xl font-bold text-text-primary">Progress</h1>
         <p className="mt-1 text-sm text-text-secondary">Your body composition and training trends</p>
+      </motion.div>
+
+      <motion.div variants={staggerItem}>
+        <ProgressCalendarCard />
       </motion.div>
 
       <motion.div variants={staggerItem}>

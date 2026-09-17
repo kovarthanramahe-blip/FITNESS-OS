@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import type { WeightLog } from '@/types/progress'
+import { getTodayDateString } from '@/utils/dateRange'
 
 export interface WeightEntryModalProps {
   isOpen: boolean
@@ -12,12 +13,8 @@ export interface WeightEntryModalProps {
   editingLog?: WeightLog | null
 }
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 export function WeightEntryModal({ isOpen, onClose, onSave, editingLog }: WeightEntryModalProps) {
-  const [date, setDate] = useState(today())
+  const [date, setDate] = useState(getTodayDateString())
   const [weight, setWeight] = useState('')
   const [note, setNote] = useState('')
 
@@ -30,7 +27,7 @@ export function WeightEntryModal({ isOpen, onClose, onSave, editingLog }: Weight
   if (openKey !== lastOpenKey) {
     setLastOpenKey(openKey)
     if (openKey) {
-      setDate(editingLog?.date ?? today())
+      setDate(editingLog?.date ?? getTodayDateString())
       setWeight(editingLog ? String(editingLog.weightKg) : '')
       setNote(editingLog?.note ?? '')
     }
@@ -48,7 +45,7 @@ export function WeightEntryModal({ isOpen, onClose, onSave, editingLog }: Weight
   return (
     <Modal isOpen={isOpen} onClose={onClose} title={editingLog ? 'Edit Weight Entry' : 'Add Weight Entry'}>
       <div className="flex flex-col gap-4">
-        <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={today()} />
+        <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={getTodayDateString()} />
         <Input
           label="Weight (kg)"
           type="number"

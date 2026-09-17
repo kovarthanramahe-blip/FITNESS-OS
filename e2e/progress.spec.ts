@@ -111,4 +111,65 @@ test.describe('Progress', () => {
     await expect(page.getByText('This Week').first()).toBeVisible()
     await expect(page.getByText('Insights')).toBeVisible()
   })
+
+  test('progress calendar shows the current month with weekday headers and a today indicator', async ({ page }) => {
+    await page.goto('/progress')
+
+    await expect(page.getByRole('heading', { name: 'Progress Calendar' })).toBeVisible()
+    for (const day of ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']) {
+      await expect(page.getByText(day, { exact: true })).toBeVisible()
+    }
+
+    const expectedMonthLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(new Date())
+    await expect(page.getByText(expectedMonthLabel, { exact: true })).toBeVisible()
+  })
+
+  test('progress calendar month navigation moves to the previous and next month', async ({ page }) => {
+    await page.goto('/progress')
+
+    const currentLabel = new Intl.DateTimeFormat('en-US', { month: 'long', year: 'numeric' }).format(new Date())
+    await expect(page.getByText(currentLabel, { exact: true })).toBeVisible()
+
+    await page.getByRole('button', { name: 'Previous month' }).click()
+    await expect(page.getByText(currentLabel, { exact: true })).not.toBeVisible()
+
+    await page.getByRole('button', { name: 'Next month' }).click()
+    await expect(page.getByText(currentLabel, { exact: true })).toBeVisible()
+  })
+
+  test('tapping today on the calendar opens a detail dialog for that date', async ({ page }) => {
+    await page.goto('/progress')
+
+    await page.getByRole('button', { name: /^Today,/ }).click()
+
+    const dialog = page.getByRole('dialog')
+    await expect(dialog).toBeVisible()
+    await expect(dialog).toContainText(/No progress recorded for this day\.|kg|kcal|Completed|L|\/ \d/)
+  })
+
+  for (const viewport of [
+    { width: 390, height: 844, label: 'mobile' },
+    { width: 768, height: 1024, label: 'tablet' },
+    { width: 1440, height: 900, label: 'desktop' },
+  ]) {
+    test(`progress calendar and range selector remain usable at ${viewport.label} width (${viewport.width}px)`, async ({ page }) => {
+      await page.setViewportSize(viewport)
+      await page.goto('/progress')
+
+      await expect(page.getByRole('heading', { name: 'Progress Calendar' })).toBeVisible()
+
+      const noPageOverflow = await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)
+      expect(noPageOverflow).toBe(true)
+
+      const rangeSelector = page.getByRole('tablist').filter({ hasText: 'ALL' })
+      await expect(rangeSelector).toBeVisible()
+      const wrapperBox = await rangeSelector.locator('..').boundingBox()
+      const cardBox = await rangeSelector.locator('../../..').boundingBox()
+      if (wrapperBox && cardBox) {
+        const leftGap = wrapperBox.x - cardBox.x
+        const rightGap = cardBox.x + cardBox.width - (wrapperBox.x + wrapperBox.width)
+        expect(Math.abs(leftGap - rightGap)).toBeLessThan(2)
+      }
+    })
+  }
 })

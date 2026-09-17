@@ -196,6 +196,64 @@ test.describe('Nutrition', () => {
     await expect(page.getByText('77.7 kg').first()).toBeVisible()
   })
 
+  test("today's seeded September entries still render correctly", async ({ page }) => {
+    await page.goto('/nutrition')
+
+    const breakfastSection = page.getByTestId('meal-section-breakfast')
+    await expect(breakfastSection.getByText('Eggs', { exact: true })).toBeVisible()
+    await expect(breakfastSection.getByText('Oats (dry)', { exact: true })).toBeVisible()
+  })
+
+  test('user can navigate from September 2026 into October 2026 and further into November 2026', async ({ page }) => {
+    await page.goto('/nutrition')
+
+    const dateInput = page.getByLabel('Nutrition date')
+    await dateInput.fill('2026-09-29')
+    await expect(dateInput).toHaveValue('2026-09-29')
+
+    // Cross the September -> October boundary via the day-by-day arrow, not the picker,
+    // to prove the "Next day" control itself is never blocked at today.
+    for (let i = 0; i < 3; i += 1) {
+      await page.getByRole('button', { name: 'Next day' }).click()
+    }
+    await expect(dateInput).toHaveValue('2026-10-02')
+    await expect(page.getByRole('button', { name: 'Next day' })).toBeEnabled()
+
+    await dateInput.fill('2026-11-15')
+    await expect(dateInput).toHaveValue('2026-11-15')
+    await expect(page.getByRole('button', { name: 'Next day' })).toBeEnabled()
+  })
+
+  test('previous-day navigation still works when returning from a future month', async ({ page }) => {
+    await page.goto('/nutrition')
+
+    const dateInput = page.getByLabel('Nutrition date')
+    await dateInput.fill('2026-10-03')
+
+    for (let i = 0; i < 5; i += 1) {
+      await page.getByRole('button', { name: 'Previous day' }).click()
+    }
+    await expect(dateInput).toHaveValue('2026-09-28')
+  })
+
+  test('a future month with no nutrition records shows the empty state rather than blocking navigation', async ({ page }) => {
+    await page.goto('/nutrition')
+
+    const dateInput = page.getByLabel('Nutrition date')
+    await dateInput.fill('2026-11-20')
+
+    await expect(page.getByText('No breakfast logged yet')).toBeVisible()
+    await expect(page.getByText('No lunch logged yet')).toBeVisible()
+
+    // Still fully navigable from here — no data doesn't mean no navigation.
+    await expect(page.getByRole('button', { name: 'Next day' })).toBeEnabled()
+    await expect(page.getByRole('button', { name: 'Previous day' })).toBeEnabled()
+    await page.getByRole('button', { name: 'Today' }).click()
+    const now = new Date()
+    const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+    await expect(dateInput).toHaveValue(todayStr)
+  })
+
   test('nutrition layout remains usable at mobile width', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto('/nutrition')

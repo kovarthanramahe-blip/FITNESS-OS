@@ -1,7 +1,7 @@
 import { getExerciseById } from '@/data/exercises'
 import type { PersonalRecord, ProgressTimeRange, StrengthProgress, StrengthProgressPoint, WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry, WorkoutSession, WorkoutSet } from '@/types/workout'
-import { filterByRange, isWithinRange } from '@/utils/dateRange'
+import { filterByRange, isWithinRange, toDateString } from '@/utils/dateRange'
 import { estimateOneRepMax } from '@/utils/personalRecords'
 import { getExerciseVolumeKg, getSessionVolumeKg } from '@/utils/workout'
 import { clamp } from '@/utils/format'
@@ -283,12 +283,12 @@ const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 /** Mon-Sun for the week containing `now`. Rest days simply show no workout — never a "failure". */
 export function getWeeklyFrequency(history: WorkoutHistoryEntry[], now: Date = new Date()): WeekdayActivity[] {
   const monday = getMonday(now)
-  const completedDates = new Set(history.map((entry) => entry.date.slice(0, 10)))
+  const completedDates = new Set(history.map((entry) => toDateString(new Date(entry.date))))
 
   return WEEKDAY_LABELS.map((label, index) => {
     const date = new Date(monday)
     date.setDate(date.getDate() + index)
-    const dateStr = date.toISOString().slice(0, 10)
+    const dateStr = toDateString(date)
     return { day: label, date: dateStr, hasWorkout: completedDates.has(dateStr) }
   })
 }
@@ -307,12 +307,12 @@ export function getMonthlyActivityCalendar(
   month: number,
   now: Date = new Date(),
 ): CalendarDay[] {
-  const completedDates = new Set(history.map((entry) => entry.date.slice(0, 10)))
+  const completedDates = new Set(history.map((entry) => toDateString(new Date(entry.date))))
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   return Array.from({ length: daysInMonth }, (_, index) => {
     const date = new Date(year, month, index + 1)
-    const dateStr = date.toISOString().slice(0, 10)
+    const dateStr = toDateString(date)
     return {
       date: dateStr,
       dayOfMonth: index + 1,

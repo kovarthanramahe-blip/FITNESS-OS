@@ -4,4 +4,8 @@
     <string name="title_activity_main">Fitness OS</string>
     <string name="package_name">com.fitnessos.app</string>
     <string name="custom_url_scheme">com.fitnessos.app</string>
+
+    <string name="health_connect_rationale_title">How Fitness OS uses Health Connect</string>
+    <string name="health_connect_rationale_body">Fitness OS uses Health Connect to access activity and workout information that you choose to share. You can change these permissions at any time in Health Connect\'s settings.\n\nFitness OS only requests read access to your daily step count and your exercise sessions. Fitness OS does not request write access, and does not request heart rate, sleep, location, nutrition, weight or body composition data.\n\nFitness OS keeps working normally whether or not you grant this access.</string>
+    <string name="health_connect_rationale_close">Close</string>
 </resources>

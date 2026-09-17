@@ -20,22 +20,31 @@ function App() {
   useAndroidBackButton()
 
   return (
-    <Suspense fallback={<LoadingState fullHeight />}>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<RequireAuth />}>
-          <Route element={<AppLayout />}>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/workout" element={<Workout />} />
-            <Route path="/nutrition" element={<Nutrition />} />
-            <Route path="/progress" element={<Progress />} />
-            <Route path="/habits" element={<Habits />} />
-            <Route path="/achievements" element={<Achievements />} />
-            <Route path="/settings" element={<Settings />} />
-          </Route>
+    <Routes>
+      <Route
+        path="/login"
+        element={
+          <Suspense fallback={<LoadingState fullHeight />}>
+            <Login />
+          </Suspense>
+        }
+      />
+      <Route element={<RequireAuth />}>
+        {/* AppLayout is never lazy and always stays mounted across these routes —
+            it owns its own Suspense boundary around just the page content, so a
+            not-yet-loaded route chunk never unmounts the Sidebar/BottomNavigation
+            shell (see AppLayout.tsx). */}
+        <Route element={<AppLayout />}>
+          <Route path="/" element={<Dashboard />} />
+          <Route path="/workout" element={<Workout />} />
+          <Route path="/nutrition" element={<Nutrition />} />
+          <Route path="/progress" element={<Progress />} />
+          <Route path="/habits" element={<Habits />} />
+          <Route path="/achievements" element={<Achievements />} />
+          <Route path="/settings" element={<Settings />} />
         </Route>
-      </Routes>
-    </Suspense>
+      </Route>
+    </Routes>
   )
 }
 

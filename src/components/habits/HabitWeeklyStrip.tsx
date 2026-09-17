@@ -2,6 +2,7 @@ import { Check } from 'lucide-react'
 import type { Habit, HabitEntry } from '@/types/habits'
 import { getWeeklyStrip } from '@/utils/habits'
 import { cn } from '@/utils/cn'
+import { parseDateOnly } from '@/utils/dateRange'
 
 export interface HabitWeeklyStripProps {
   habit: Habit
@@ -12,7 +13,7 @@ export interface HabitWeeklyStripProps {
 const WEEKDAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
 function formatDayLabel(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+  return parseDateOnly(dateStr).toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
 }
 
 /**

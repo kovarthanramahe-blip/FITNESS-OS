@@ -2,13 +2,14 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { BodyMeasurement } from '@/types/progress'
 import { CHART_COLORS, chartTooltipStyle } from '@/components/shared/chartTheme'
+import { parseDateOnly } from '@/utils/dateRange'
 
 export interface MeasurementChartProps {
   measurements: BodyMeasurement[]
 }
 
 function formatChartDate(dateIso: string): string {
-  return new Date(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return parseDateOnly(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 interface TooltipPayloadEntry {

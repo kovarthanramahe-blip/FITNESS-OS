@@ -6,6 +6,7 @@ import { Select } from '@/components/ui/Select'
 import { sampleFoodLibrary } from '@/data/foodLibrary'
 import { MEAL_LABELS, MEAL_TYPES } from '@/types/nutrition'
 import type { FoodEntry, MealType } from '@/types/nutrition'
+import { getTodayDateString } from '@/utils/dateRange'
 
 export interface FoodEntrySaveInput {
   foodId: string
@@ -32,10 +33,6 @@ export interface FoodEntryModalProps {
 
 const CUSTOM_OPTION = '__custom__'
 
-function today(): string {
-  return new Date().toISOString().slice(0, 10)
-}
-
 function round1(value: number): number {
   return Math.round(value * 10) / 10
 }
@@ -51,7 +48,7 @@ export function FoodEntryModal({ isOpen, onClose, onSave, editingEntry, defaultM
   const [fat, setFat] = useState('')
   const [fiber, setFiber] = useState('')
   const [meal, setMeal] = useState<MealType>(defaultMeal ?? 'breakfast')
-  const [date, setDate] = useState(defaultDate ?? today())
+  const [date, setDate] = useState(defaultDate ?? getTodayDateString())
 
   // Resets the form whenever the modal opens (fresh, or for a different
   // entry), without an Effect — see WeightEntryModal for the same pattern.
@@ -71,7 +68,7 @@ export function FoodEntryModal({ isOpen, onClose, onSave, editingEntry, defaultM
       setFat(editingEntry ? String(editingEntry.fat) : '')
       setFiber(editingEntry ? String(editingEntry.fiber) : '')
       setMeal(editingEntry?.meal ?? defaultMeal ?? 'breakfast')
-      setDate(editingEntry?.date ?? defaultDate ?? today())
+      setDate(editingEntry?.date ?? defaultDate ?? getTodayDateString())
     }
   }
 
@@ -241,7 +238,7 @@ export function FoodEntryModal({ isOpen, onClose, onSave, editingEntry, defaultM
             onChange={(event) => setMeal(event.target.value as MealType)}
             options={MEAL_TYPES.map((type) => ({ value: type, label: MEAL_LABELS[type] }))}
           />
-          <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={today()} />
+          <Input label="Date" type="date" value={date} onChange={(event) => setDate(event.target.value)} max={getTodayDateString()} />
         </div>
 
         <Button variant="primary" size="lg" className="w-full justify-center" onClick={handleSave} disabled={!canSave}>

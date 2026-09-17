@@ -1,10 +1,11 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useState } from 'react'
+import { Suspense, useCallback, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Outlet, useLocation } from 'react-router-dom'
 import { BottomNavigation } from '@/components/navigation/BottomNavigation'
 import { Sidebar } from '@/components/navigation/Sidebar'
 import { BadgeUnlockToast } from '@/components/gamification/BadgeUnlockToast'
+import { LoadingState } from '@/components/ui/LoadingState'
 import { pageTransition } from '@/animations/variants'
 import { useCloudSync } from '@/lib/cloudSync'
 import { useGamificationSync } from '@/hooks/useGamificationSync'
@@ -46,17 +47,27 @@ export function AppLayout() {
       <Sidebar />
       <div className="lg:pl-64">
         <main className="mx-auto w-full max-w-6xl px-4 pb-24 pt-6 sm:px-6 lg:px-8 lg:pb-10 lg:pt-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={location.pathname}
-              variants={pageTransition}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-            >
+          {/*
+            No AnimatePresence/exit here on purpose: mode="wait" forced every
+            navigation through a full sequential exit-then-enter (~0.5s tax,
+            every time). Switching to an overlapping mode (e.g. "popLayout")
+            removes that wait, but under fast successive navigations — exactly
+            the case this change targets — it can leave more than one page's
+            exit animation still in flight at once, so two full pages end up
+            mounted simultaneously (caught by e2e/navigation.spec.ts). Keying
+            the div with no exit animation avoids both problems: the outgoing
+            page is removed the instant the key changes (no lingering node to
+            overlap with a later navigation), while the incoming page still
+            plays its own full enter transition below.
+          */}
+          <motion.div key={location.pathname} variants={pageTransition} initial="hidden" animate="visible">
+            {/* Confines a not-yet-loaded route chunk's fallback to this content
+                area only — the shell (Sidebar/BottomNavigation) above and below
+                never unmounts while a lazy page is loading. */}
+            <Suspense fallback={<LoadingState />}>
               <Outlet />
-            </motion.div>
-          </AnimatePresence>
+            </Suspense>
+          </motion.div>
         </main>
       </div>
       <BottomNavigation />

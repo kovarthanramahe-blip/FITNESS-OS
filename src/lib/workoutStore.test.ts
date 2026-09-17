@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getProgramById } from '@/data/programs'
 import { onStorageFailure, resetStorageHealthForTests } from '@/lib/localStorageHealth'
-import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
+import { resetStorageScopeForTests, scopedStorageKey, setCurrentUserId } from '@/lib/storageScope'
 import {
   addSet,
   completeSession,
@@ -16,6 +17,7 @@ import {
   updateSet,
 } from './workoutStore'
 import type { Workout } from '@/types/workout'
+import { resolveProgramDay } from '@/utils/workout'
 
 const sampleWorkout: Workout = {
   id: 'test-workout',
@@ -25,6 +27,16 @@ const sampleWorkout: Workout = {
     { exerciseId: 'lateral-raise', sets: 2, reps: '12-15' },
   ],
   estimatedMinutes: 30,
+}
+
+/** The program's real, actually-scheduled workout for `dayIndex` — used wherever a test needs
+ * `startSession` to be recognized as "the scheduled day", which is matched by workout id. */
+function scheduledWorkoutFor(programId: string, dayIndex: number): Workout {
+  const program = getProgramById(programId)
+  if (!program) throw new Error(`expected the "${programId}" fixture program`)
+  const day = resolveProgramDay(program, dayIndex)
+  if (day.type !== 'workout') throw new Error(`expected day ${dayIndex} of "${programId}" to be a workout day`)
+  return day.workout
 }
 
 beforeEach(() => {
@@ -111,7 +123,26 @@ describe('addSet', () => {
 })
 
 describe('completeSession', () => {
-  it('moves the session into history, advances the day index, and clears the active session', () => {
+  it('moves the session into history, advances the day index, and clears the active session — for the scheduled day', () => {
+    const before = getWorkoutState()
+    // Starting the day's actual scheduled workout (matched by id) is what makes the day index advance.
+    const scheduled = scheduledWorkoutFor(before.selectedProgramId ?? 'intermediate-ppl', before.currentDayIndex)
+    startSession(scheduled, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession?.exercises[0]?.id ?? ''
+    const setId = getWorkoutState().activeSession?.exercises[0]?.sets[0]?.id ?? ''
+    updateSet(exerciseId, setId, { weightKg: 65, reps: 8, completed: true })
+
+    const summary = completeSession()
+
+    const state = getWorkoutState()
+    expect(state.activeSession).toBeNull()
+    expect(state.currentDayIndex).toBe(before.currentDayIndex + 1)
+    expect(state.history[0]?.name).toBe(scheduled.name)
+    expect(summary?.newPersonalRecords).toHaveLength(1)
+    expect(summary?.historyEntry.setCount).toBe(1)
+  })
+
+  it('moves an off-schedule workout into history too, but does not advance the day index', () => {
     const before = getWorkoutState()
     startSession(sampleWorkout, 'Intermediate')
     const exerciseId = getWorkoutState().activeSession?.exercises[0]?.id ?? ''
@@ -122,7 +153,7 @@ describe('completeSession', () => {
 
     const state = getWorkoutState()
     expect(state.activeSession).toBeNull()
-    expect(state.currentDayIndex).toBe(before.currentDayIndex + 1)
+    expect(state.currentDayIndex).toBe(before.currentDayIndex)
     expect(state.history[0]?.name).toBe('Test Push Day')
     expect(summary?.newPersonalRecords).toHaveLength(1)
     expect(summary?.historyEntry.setCount).toBe(1)
@@ -144,6 +175,192 @@ describe('discardSession', () => {
     const state = getWorkoutState()
     expect(state.activeSession).toBeNull()
     expect(state.history).toHaveLength(historyLengthBefore)
+  })
+})
+
+describe('startSession — choosing a different workout than the scheduled day', () => {
+  const chosenLegs: Workout = {
+    id: 'test-legs-a',
+    name: 'Legs A',
+    exercises: [{ exerciseId: 'squat', sets: 4, reps: '5-8' }],
+    estimatedMinutes: 55,
+  }
+
+  it('starts the chosen workout, not the scheduled one — the active session records what was actually picked', () => {
+    // The program is still "on" Push (whatever selectProgram/currentDayIndex says);
+    // the user chooses Legs instead. startSession takes the Workout the caller
+    // passes it — it never looks at the schedule itself to decide what to run.
+    startSession(chosenLegs, 'Intermediate')
+
+    expect(getWorkoutState().activeSession?.name).toBe('Legs A')
+    expect(getWorkoutState().activeSession?.exercises[0]?.exerciseId).toBe('squat')
+  })
+
+  it('does not touch selectedProgramId or currentDayIndex just by starting a non-scheduled workout', () => {
+    selectProgram('intermediate-ppl')
+    const before = getWorkoutState()
+
+    startSession(chosenLegs, 'Intermediate')
+
+    const after = getWorkoutState()
+    expect(after.selectedProgramId).toBe(before.selectedProgramId)
+    expect(after.currentDayIndex).toBe(before.currentDayIndex)
+  })
+
+  it('workout history identifies the actually-performed workout after completion, not the scheduled one', () => {
+    startSession(chosenLegs, 'Intermediate')
+    completeSession()
+
+    expect(getWorkoutState().history[0]?.name).toBe('Legs A')
+  })
+
+  it('PR detection, volume and set counts are unaffected by which workout day was chosen', () => {
+    startSession(chosenLegs, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession?.exercises[0]?.id ?? ''
+    const setId = getWorkoutState().activeSession?.exercises[0]?.sets[0]?.id ?? ''
+    updateSet(exerciseId, setId, { weightKg: 100, reps: 5, completed: true })
+
+    const summary = completeSession()
+
+    expect(summary?.historyEntry.volumeKg).toBe(500)
+    expect(summary?.historyEntry.setCount).toBe(1)
+    expect(summary?.newPersonalRecords.length).toBeGreaterThan(0)
+  })
+})
+
+describe('completeSession — schedule advancement is decided by workout id, not by name', () => {
+  beforeEach(() => {
+    selectProgram('intermediate-ppl') // day 0 = Push A, day 1 = Pull A, day 2 = Legs A
+  })
+
+  function complete(workout: Workout) {
+    startSession(workout, 'Intermediate')
+    const exerciseId = getWorkoutState().activeSession?.exercises[0]?.id ?? ''
+    const setId = getWorkoutState().activeSession?.exercises[0]?.sets[0]?.id ?? ''
+    updateSet(exerciseId, setId, { weightKg: 60, reps: 8, completed: true })
+    return completeSession()
+  }
+
+  it('1. Scheduled Push -> choose Push -> complete -> schedule advances', () => {
+    const before = getWorkoutState().currentDayIndex
+    const pushA = scheduledWorkoutFor('intermediate-ppl', before)
+
+    complete(pushA)
+
+    expect(getWorkoutState().currentDayIndex).toBe(before + 1)
+    expect(getWorkoutState().history[0]?.name).toBe('Push A')
+  })
+
+  it('2. Scheduled Push -> choose Pull -> complete -> schedule does NOT advance', () => {
+    const before = getWorkoutState().currentDayIndex
+    const pullA = scheduledWorkoutFor('intermediate-ppl', 1)
+
+    complete(pullA)
+
+    expect(getWorkoutState().currentDayIndex).toBe(before)
+    expect(getWorkoutState().history[0]?.name).toBe('Pull A')
+  })
+
+  it('3. Scheduled Push -> choose Legs -> complete -> schedule does NOT advance', () => {
+    const before = getWorkoutState().currentDayIndex
+    const legsA = scheduledWorkoutFor('intermediate-ppl', 2)
+
+    complete(legsA)
+
+    expect(getWorkoutState().currentDayIndex).toBe(before)
+    expect(getWorkoutState().history[0]?.name).toBe('Legs A')
+  })
+
+  it('4. Scheduled Push -> complete a Custom Workout -> schedule does NOT advance', () => {
+    const before = getWorkoutState().currentDayIndex
+    const custom: Workout = {
+      id: 'custom-arm-day',
+      name: 'Arm Day',
+      exercises: [{ exerciseId: 'barbell-curl', sets: 3, reps: '10-12' }],
+      estimatedMinutes: 30,
+    }
+    saveCustomWorkout(custom)
+
+    complete(custom)
+
+    expect(getWorkoutState().currentDayIndex).toBe(before)
+    expect(getWorkoutState().history[0]?.name).toBe('Arm Day')
+  })
+
+  it('5. workout history always records the actual workout performed, scheduled or not', () => {
+    const legsA = scheduledWorkoutFor('intermediate-ppl', 2)
+    complete(legsA)
+    expect(getWorkoutState().history[0]?.name).toBe('Legs A')
+
+    const pushA = scheduledWorkoutFor('intermediate-ppl', getWorkoutState().currentDayIndex)
+    complete(pushA)
+    expect(getWorkoutState().history[0]?.name).toBe('Push A')
+  })
+
+  it('does not confuse two different days that merely share part of a name (id comparison, not name comparison)', () => {
+    // advanced-ppl schedules "Push A" on day 0 and "Push B" on day 3 — same
+    // family name, different ids. Only an exact id match should count as scheduled.
+    selectProgram('advanced-ppl')
+    const before = getWorkoutState().currentDayIndex // day 0, scheduled = Push A
+    const pushB = scheduledWorkoutFor('advanced-ppl', 3)
+
+    complete(pushB)
+
+    expect(getWorkoutState().currentDayIndex).toBe(before)
+    expect(getWorkoutState().history[0]?.name).toBe('Push B')
+  })
+
+  it('8. existing scheduled-day progression through a full rotation remains valid', () => {
+    let day = getWorkoutState().currentDayIndex
+    for (let i = 0; i < 3; i += 1) {
+      const scheduled = scheduledWorkoutFor('intermediate-ppl', day)
+      complete(scheduled)
+      day += 1
+      expect(getWorkoutState().currentDayIndex).toBe(day)
+    }
+  })
+})
+
+describe('resuming an active session preserves its scheduling context', () => {
+  it('7. a resumed (reloaded) session still does not advance the schedule if it was an alternative workout', () => {
+    selectProgram('intermediate-ppl')
+    const before = getWorkoutState().currentDayIndex
+    const legsA = scheduledWorkoutFor('intermediate-ppl', 2)
+    startSession(legsA, 'Intermediate')
+
+    // Simulate the app reloading mid-workout: re-read state fresh from the
+    // same in-memory/localStorage-backed store, the way a resumed session would.
+    const resumed = getWorkoutState()
+    expect(resumed.activeSession?.name).toBe('Legs A')
+    expect(resumed.activeSessionIsScheduled).toBe(false)
+
+    completeSession()
+    expect(getWorkoutState().currentDayIndex).toBe(before)
+  })
+
+  it('a resumed session still advances the schedule if it was the scheduled workout', () => {
+    selectProgram('intermediate-ppl')
+    const before = getWorkoutState().currentDayIndex
+    const pushA = scheduledWorkoutFor('intermediate-ppl', before)
+    startSession(pushA, 'Intermediate')
+
+    const resumed = getWorkoutState()
+    expect(resumed.activeSessionIsScheduled).toBe(true)
+
+    completeSession()
+    expect(getWorkoutState().currentDayIndex).toBe(before + 1)
+  })
+
+  it('the scheduling context is actually written to localStorage, not just held in memory', () => {
+    selectProgram('intermediate-ppl')
+    const legsA = scheduledWorkoutFor('intermediate-ppl', 2)
+    startSession(legsA, 'Intermediate')
+
+    const raw = window.localStorage.getItem(scopedStorageKey('fitness-os:workout-store:v1'))
+    expect(raw).not.toBeNull()
+    const persisted = JSON.parse(raw ?? '{}') as { activeSessionIsScheduled?: boolean; activeSession?: { name?: string } }
+    expect(persisted.activeSession?.name).toBe('Legs A')
+    expect(persisted.activeSessionIsScheduled).toBe(false)
   })
 })
 

@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Button } from '@/components/ui/Button'
 import type { WeightLog } from '@/types/progress'
 import { fadeIn } from '@/animations/variants'
+import { parseDateOnly } from '@/utils/dateRange'
 
 export interface WeightLogListProps {
   logs: WeightLog[]
@@ -12,7 +13,7 @@ export interface WeightLogListProps {
 }
 
 function formatDate(dateIso: string): string {
-  return new Date(dateIso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+  return parseDateOnly(dateIso).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 export function WeightLogList({ logs, onEdit, onDelete }: WeightLogListProps) {

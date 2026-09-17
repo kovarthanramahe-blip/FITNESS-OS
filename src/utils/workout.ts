@@ -98,6 +98,36 @@ export function resolveProgramDay(program: WorkoutProgram, dayIndex: number): Pr
   return day
 }
 
+/** The muscle groups a workout *template* trains, derived from its exercises' library categories. */
+export function getWorkoutMuscleGroups(workout: Workout): string[] {
+  return [
+    ...new Set(
+      workout.exercises
+        .map((template) => getExerciseById(template.exerciseId)?.category)
+        .filter((category): category is NonNullable<typeof category> => Boolean(category)),
+    ),
+  ]
+}
+
+/**
+ * Every distinct workout a user could choose to train today under this
+ * program — every `type: 'workout'` schedule entry, deduplicated by
+ * `workout.id` (a program can repeat the same day, e.g. "Full Body A" on
+ * both day 1 and day 5; a rotation like PPL doesn't). Order follows the
+ * schedule, so this doubles as the option order shown in the picker.
+ */
+export function getProgramWorkoutOptions(program: WorkoutProgram): Workout[] {
+  const seen = new Set<string>()
+  const options: Workout[] = []
+  for (const day of program.schedule) {
+    if (day.type !== 'workout') continue
+    if (seen.has(day.workout.id)) continue
+    seen.add(day.workout.id)
+    options.push(day.workout)
+  }
+  return options
+}
+
 /** Turns a program's workout template into a fresh, unlogged set of session exercises. */
 export function instantiateWorkoutExercises(workout: Workout): WorkoutExercise[] {
   return workout.exercises.map((template, exerciseIndex) => {
@@ -160,17 +190,10 @@ export function getTodaysWorkoutSummary(
 
   if (programDay?.type === 'workout') {
     const { workout } = programDay
-    const muscleGroups = [
-      ...new Set(
-        workout.exercises
-          .map((template) => getExerciseById(template.exerciseId)?.category)
-          .filter((category): category is NonNullable<typeof category> => Boolean(category)),
-      ),
-    ]
     return {
       id: workout.id,
       name: workout.name,
-      muscleGroups,
+      muscleGroups: getWorkoutMuscleGroups(workout),
       totalExercises: workout.exercises.length,
       completedExercises: 0,
       durationMinutes: workout.estimatedMinutes,

@@ -2,13 +2,14 @@ import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YA
 import { CHART_COLORS, chartTooltipStyle } from '@/components/shared/chartTheme'
 import { EmptyState } from '@/components/ui/EmptyState'
 import type { NutritionHistoryPoint } from '@/utils/nutrition'
+import { parseDateOnly } from '@/utils/dateRange'
 
 export interface NutritionHistoryChartProps {
   history: NutritionHistoryPoint[]
 }
 
 function formatChartDate(dateIso: string): string {
-  return new Date(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return parseDateOnly(dateIso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }
 
 interface TooltipPayloadEntry {
