@@ -1,10 +1,20 @@
 import { Capacitor } from '@capacitor/core'
 import { HealthConnectPlugin } from './plugin'
-import type { HealthConnectPermissionState, HealthConnectStatus } from './types'
+import type { HealthConnectPermissionState, HealthConnectStatus, HealthConnectStepsResult } from './types'
+import { parseDateOnly, toDateString } from '@/utils/dateRange'
 
-export type { HealthConnectPermission, HealthConnectPermissionState, HealthConnectStatus } from './types'
+export type {
+  HealthConnectPermission,
+  HealthConnectPermissionState,
+  HealthConnectStatus,
+  HealthConnectStepsErrorReason,
+  DailyStepsEntry,
+  HealthConnectStepsResult,
+} from './types'
 
 const NO_PERMISSIONS: HealthConnectPermissionState = { granted: [], steps: false, exercise: false }
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 function isNative(): boolean {
   return Capacitor.isNativePlatform()
@@ -12,6 +22,16 @@ function isNative(): boolean {
 
 function reportFailure(context: string, error: unknown): void {
   console.error(`[Fitness OS] Health Connect call failed (${context}):`, error)
+}
+
+/** Rejects malformed strings and calendar-invalid ones (e.g. `2026-02-30`), reusing the same round-trip the rest of the app relies on for date-only values. */
+function isValidDateOnlyString(value: string): boolean {
+  if (!DATE_ONLY_PATTERN.test(value)) return false
+  return toDateString(parseDateOnly(value)) === value
+}
+
+function stepsResult(overrides: Partial<HealthConnectStepsResult> = {}): HealthConnectStepsResult {
+  return { available: false, permissionGranted: false, days: [], error: null, ...overrides }
 }
 
 /**
@@ -58,7 +78,7 @@ export const healthConnect = {
   async requestPermissions(): Promise<HealthConnectPermissionState> {
     if (!isNative()) return NO_PERMISSIONS
     try {
-      return await HealthConnectPlugin.requestPermissions()
+      return await HealthConnectPlugin.requestHealthConnectPermissions()
     } catch (error) {
       reportFailure('requestPermissions', error)
       return NO_PERMISSIONS
@@ -71,6 +91,30 @@ export const healthConnect = {
       await HealthConnectPlugin.openSettings()
     } catch (error) {
       reportFailure('openSettings', error)
+    }
+  },
+
+  /**
+   * Reads real daily step totals for an inclusive `[startDate, endDate]`
+   * range of `yyyy-mm-dd` local dates. Validates the range itself first
+   * (malformed date, invalid calendar date, or `startDate > endDate`) so a
+   * bad call never even reaches the native side; everything past that point
+   * — Health Connect missing, permission not granted, the read itself
+   * failing — comes back as a typed `error`, never a thrown exception.
+   */
+  async getSteps(startDate: string, endDate: string): Promise<HealthConnectStepsResult> {
+    if (!isValidDateOnlyString(startDate) || !isValidDateOnlyString(endDate) || startDate > endDate) {
+      return stepsResult({ error: 'invalid_range' })
+    }
+    if (!isNative()) {
+      return stepsResult({ error: 'unavailable' })
+    }
+    try {
+      const result = await HealthConnectPlugin.getSteps({ startDate, endDate })
+      return { ...result, error: result.error ?? null }
+    } catch (error) {
+      reportFailure('getSteps', error)
+      return stepsResult({ error: 'query_failed' })
     }
   },
 }

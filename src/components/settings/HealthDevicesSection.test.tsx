@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { HealthDevicesSection } from './HealthDevicesSection'
 import { useHealthConnect } from '@/hooks/useHealthConnect'
 import type { UseHealthConnectResult } from '@/hooks/useHealthConnect'
+import type { HealthConnectPermissionState } from '@/lib/healthConnect'
 
 vi.mock('@/hooks/useHealthConnect')
 
@@ -19,6 +20,10 @@ function hookValue(overrides: Partial<UseHealthConnectResult> = {}): UseHealthCo
     connect: vi.fn(),
     refresh: vi.fn(),
     openSettings: vi.fn(),
+    steps: null,
+    stepsLoading: false,
+    stepsError: null,
+    refreshSteps: vi.fn(),
     ...overrides,
   }
 }
@@ -127,14 +132,16 @@ describe('HealthDevicesSection — actions', () => {
     expect(openSettings).toHaveBeenCalledTimes(1)
   })
 
-  it('tapping Sync Now calls refresh() (state-only refresh in this phase)', async () => {
+  it('tapping Sync Now calls refresh() and refreshSteps()', async () => {
     const refresh = vi.fn()
+    const refreshSteps = vi.fn()
     mockedUseHealthConnect.mockReturnValue(
       hookValue({
         status: 'available',
         permissions: { granted: ['READ_STEPS', 'READ_EXERCISE'], steps: true, exercise: true },
         isConnected: true,
         refresh,
+        refreshSteps,
       }),
     )
     const user = userEvent.setup()
@@ -142,5 +149,84 @@ describe('HealthDevicesSection — actions', () => {
 
     await user.click(screen.getByRole('button', { name: 'Sync Now' }))
     expect(refresh).toHaveBeenCalledTimes(1)
+    expect(refreshSteps).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('HealthDevicesSection — steps (Phase 8B.1)', () => {
+  const CONNECTED_BASE = {
+    status: 'available' as const,
+    permissions: { granted: ['READ_STEPS', 'READ_EXERCISE'], steps: true, exercise: true } as HealthConnectPermissionState,
+    isConnected: true,
+  }
+
+  it('shows a loading placeholder for steps before the first read resolves', () => {
+    mockedUseHealthConnect.mockReturnValue(hookValue({ ...CONNECTED_BASE, steps: null, stepsLoading: true }))
+    render(<HealthDevicesSection />)
+
+    expect(screen.getByText("Today's Steps")).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
+  })
+
+  it('shows real today/7-day step data once loaded', () => {
+    mockedUseHealthConnect.mockReturnValue(
+      hookValue({
+        ...CONNECTED_BASE,
+        stepsLoading: false,
+        steps: {
+          available: true,
+          permissionGranted: true,
+          error: null,
+          days: [
+            { date: '2026-09-15', steps: 4000 },
+            { date: '2026-09-16', steps: 12345 },
+          ],
+        },
+      }),
+    )
+    render(<HealthDevicesSection />)
+
+    expect(screen.getByText('Last 7 Days')).toBeInTheDocument()
+    expect(screen.getByText('4,000')).toBeInTheDocument()
+    expect(screen.getByText('12,345')).toBeInTheDocument()
+  })
+
+  it('shows 0 for today when today has no entry in the read result yet', () => {
+    mockedUseHealthConnect.mockReturnValue(
+      hookValue({
+        ...CONNECTED_BASE,
+        stepsLoading: false,
+        steps: { available: true, permissionGranted: true, error: null, days: [{ date: '2020-01-01', steps: 999 }] },
+      }),
+    )
+    render(<HealthDevicesSection />)
+
+    const todayStepsHeading = screen.getByText("Today's Steps")
+    expect(todayStepsHeading.nextElementSibling).toHaveTextContent('0')
+  })
+
+  it('surfaces a friendly stepsError without hiding the rest of the section', () => {
+    mockedUseHealthConnect.mockReturnValue(
+      hookValue({ ...CONNECTED_BASE, stepsError: 'We couldn’t read step data right now. Please try again.' }),
+    )
+    render(<HealthDevicesSection />)
+
+    expect(screen.getByText('We couldn’t read step data right now. Please try again.')).toBeInTheDocument()
+    expect(screen.getByText('Health & Devices')).toBeInTheDocument()
+  })
+
+  it('does not show step data when not connected', () => {
+    mockedUseHealthConnect.mockReturnValue(
+      hookValue({
+        status: 'available',
+        permissions: { granted: [], steps: false, exercise: false },
+        isConnected: false,
+        steps: { available: true, permissionGranted: true, error: null, days: [{ date: '2026-09-16', steps: 500 }] },
+      }),
+    )
+    render(<HealthDevicesSection />)
+
+    expect(screen.queryByText("Today's Steps")).not.toBeInTheDocument()
+    expect(screen.queryByText('Last 7 Days')).not.toBeInTheDocument()
   })
 })

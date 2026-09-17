@@ -2,7 +2,8 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHealthConnect } from './useHealthConnect'
 import { healthConnect } from '@/lib/healthConnect'
-import type { HealthConnectPermissionState, HealthConnectStatus } from '@/lib/healthConnect'
+import type { HealthConnectPermissionState, HealthConnectStatus, HealthConnectStepsResult } from '@/lib/healthConnect'
+import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
 
 vi.mock('@/lib/healthConnect')
 
@@ -11,6 +12,7 @@ const mockedHealthConnect = vi.mocked(healthConnect)
 const GRANTED: HealthConnectPermissionState = { granted: ['READ_STEPS', 'READ_EXERCISE'], steps: true, exercise: true }
 const PARTIAL: HealthConnectPermissionState = { granted: ['READ_STEPS'], steps: true, exercise: false }
 const NONE: HealthConnectPermissionState = { granted: [], steps: false, exercise: false }
+const NO_STEPS: HealthConnectStepsResult = { available: false, permissionGranted: false, days: [], error: null }
 
 function mockStatus(status: HealthConnectStatus, permissions: HealthConnectPermissionState = NONE) {
   mockedHealthConnect.getStatus.mockResolvedValue(status)
@@ -20,6 +22,7 @@ function mockStatus(status: HealthConnectStatus, permissions: HealthConnectPermi
 beforeEach(() => {
   vi.resetAllMocks()
   mockedHealthConnect.openSettings.mockResolvedValue(undefined)
+  mockedHealthConnect.getSteps.mockResolvedValue(NO_STEPS)
 })
 
 describe('useHealthConnect — initial load', () => {
@@ -166,5 +169,77 @@ describe('useHealthConnect — openSettings()', () => {
     })
 
     expect(mockedHealthConnect.openSettings).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useHealthConnect — steps (Phase 8B.1)', () => {
+  // Scenario 16: hook loading state.
+  it('starts with stepsLoading true and steps null before the first read resolves', () => {
+    mockStatus('available', GRANTED)
+    const { result } = renderHook(() => useHealthConnect())
+
+    expect(result.current.stepsLoading).toBe(true)
+    expect(result.current.steps).toBeNull()
+  })
+
+  // Scenario 17: hook success state.
+  it('reflects a successful read once it resolves', async () => {
+    mockStatus('available', GRANTED)
+    const stepsResult: HealthConnectStepsResult = {
+      available: true,
+      permissionGranted: true,
+      days: [{ date: '2026-09-16', steps: 8234 }],
+      error: null,
+    }
+    mockedHealthConnect.getSteps.mockResolvedValue(stepsResult)
+
+    const { result } = renderHook(() => useHealthConnect())
+    await waitFor(() => expect(result.current.stepsLoading).toBe(false))
+
+    expect(result.current.steps).toEqual(stepsResult)
+    expect(result.current.stepsError).toBeNull()
+  })
+
+  // Scenario 18: hook error state.
+  it('surfaces a friendly stepsError, never a raw one, when the read itself throws', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    mockStatus('available', GRANTED)
+    mockedHealthConnect.getSteps.mockRejectedValue(new Error('bridge disconnected'))
+
+    const { result } = renderHook(() => useHealthConnect())
+    await waitFor(() => expect(result.current.stepsLoading).toBe(false))
+
+    expect(result.current.stepsError).not.toBeNull()
+    expect(result.current.stepsError ?? '').not.toContain('bridge disconnected')
+  })
+
+  it('reads an inclusive 7-day window ending today, on mount', async () => {
+    mockStatus('available', GRANTED)
+    const { result } = renderHook(() => useHealthConnect())
+    await waitFor(() => expect(result.current.stepsLoading).toBe(false))
+
+    const today = getTodayDateString()
+    expect(mockedHealthConnect.getSteps).toHaveBeenCalledWith(addDaysToDateString(today, -6), today)
+  })
+
+  it('refreshSteps() re-reads step data on demand', async () => {
+    mockStatus('available', GRANTED)
+    const { result } = renderHook(() => useHealthConnect())
+    await waitFor(() => expect(result.current.stepsLoading).toBe(false))
+
+    const updated: HealthConnectStepsResult = {
+      available: true,
+      permissionGranted: true,
+      days: [{ date: getTodayDateString(), steps: 12345 }],
+      error: null,
+    }
+    mockedHealthConnect.getSteps.mockResolvedValue(updated)
+
+    await act(async () => {
+      await result.current.refreshSteps()
+    })
+
+    expect(result.current.steps).toEqual(updated)
+    expect(mockedHealthConnect.getSteps).toHaveBeenCalledTimes(2)
   })
 })

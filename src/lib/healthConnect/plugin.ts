@@ -1,5 +1,5 @@
 import { registerPlugin } from '@capacitor/core'
-import type { HealthConnectPermissionState, HealthConnectStatus } from './types'
+import type { HealthConnectPermissionState, HealthConnectStatus, HealthConnectStepsResult } from './types'
 
 /**
  * The raw native bridge contract — matches
@@ -12,8 +12,18 @@ export interface HealthConnectPluginApi {
   isAvailable(): Promise<{ value: boolean }>
   getStatus(): Promise<{ status: HealthConnectStatus }>
   getGrantedPermissions(): Promise<HealthConnectPermissionState>
-  requestPermissions(): Promise<HealthConnectPermissionState>
+  /**
+   * Named to match the native method exactly — deliberately NOT
+   * `requestPermissions`, since Capacitor's own `Plugin` superclass already
+   * declares a `@PluginMethod requestPermissions(PluginCall)` for its
+   * unrelated generic runtime-permission flow. `@/lib/healthConnect` still
+   * exposes this to the rest of the app as `requestPermissions()` — only
+   * this raw bridge binding needs the distinct name.
+   */
+  requestHealthConnectPermissions(): Promise<HealthConnectPermissionState>
   openSettings(): Promise<void>
+  /** `startDate`/`endDate` are inclusive `yyyy-mm-dd` local dates. */
+  getSteps(options: { startDate: string; endDate: string }): Promise<HealthConnectStepsResult>
 }
 
 export const HealthConnectPlugin = registerPlugin<HealthConnectPluginApi>('HealthConnect')

@@ -19,3 +19,25 @@ export interface HealthConnectPermissionState {
   steps: boolean
   exercise: boolean
 }
+
+/**
+ * Phase 8B.1 adds real step reading on top of the Phase 8A foundation above.
+ * `error` distinguishes every way a `getSteps` call can come back empty
+ * without throwing: no Health Connect on this platform/device, the steps
+ * permission isn't granted, the requested range itself is invalid, or the
+ * on-device read failed. `null` means the read actually succeeded.
+ */
+export type HealthConnectStepsErrorReason = 'unavailable' | 'permission_denied' | 'invalid_range' | 'query_failed'
+
+export interface DailyStepsEntry {
+  /** yyyy-mm-dd, local calendar date. */
+  date: string
+  steps: number
+}
+
+export interface HealthConnectStepsResult {
+  available: boolean
+  permissionGranted: boolean
+  days: DailyStepsEntry[]
+  error: HealthConnectStepsErrorReason | null
+}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { healthConnect } from '@/lib/healthConnect'
-import type { HealthConnectPermissionState, HealthConnectStatus } from '@/lib/healthConnect'
+import type { HealthConnectPermissionState, HealthConnectStatus, HealthConnectStepsResult } from '@/lib/healthConnect'
+import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
 
 export interface UseHealthConnectResult {
   /** `null` only until the first check resolves. */
@@ -16,9 +17,17 @@ export interface UseHealthConnectResult {
   /** Re-checks availability + granted permissions — the "Sync Now" action for this phase. */
   refresh: () => Promise<void>
   openSettings: () => Promise<void>
+  /** Phase 8B.1: the last 7 days of real step data (today inclusive), or `null` before the first read resolves. */
+  steps: HealthConnectStepsResult | null
+  stepsLoading: boolean
+  /** User-friendly message only, set only when the read itself unexpectedly throws — an expected state like "no permission" lives in `steps.error` instead. */
+  stepsError: string | null
+  /** Re-reads the last 7 days of step data. Safe to call even when unavailable/not permitted. */
+  refreshSteps: () => Promise<void>
 }
 
 const NO_PERMISSIONS: HealthConnectPermissionState = { granted: [], steps: false, exercise: false }
+const STEPS_WINDOW_DAYS = 7
 
 /**
  * Loads Health Connect availability + permission state on mount and exposes
@@ -32,6 +41,9 @@ export function useHealthConnect(): UseHealthConnectResult {
   const [permissions, setPermissions] = useState<HealthConnectPermissionState>(NO_PERMISSIONS)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [steps, setSteps] = useState<HealthConnectStepsResult | null>(null)
+  const [stepsLoading, setStepsLoading] = useState(true)
+  const [stepsError, setStepsError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     setLoading(true)
@@ -56,6 +68,26 @@ export function useHealthConnect(): UseHealthConnectResult {
     // oxlint-disable-next-line react/set-state-in-effect -- starting a genuinely new async check on mount, not mirroring a prop into state.
     void refresh()
   }, [refresh])
+
+  const refreshSteps = useCallback(async () => {
+    setStepsLoading(true)
+    setStepsError(null)
+    try {
+      const today = getTodayDateString()
+      const startDate = addDaysToDateString(today, -(STEPS_WINDOW_DAYS - 1))
+      setSteps(await healthConnect.getSteps(startDate, today))
+    } catch (caughtError: unknown) {
+      console.error('[Fitness OS] Failed to read Health Connect step data:', caughtError)
+      setStepsError('We couldn’t read step data right now. Please try again.')
+    } finally {
+      setStepsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    // oxlint-disable-next-line react/set-state-in-effect -- starting a genuinely new async read on mount, not mirroring a prop into state.
+    void refreshSteps()
+  }, [refreshSteps])
 
   const connect = useCallback(async () => {
     setLoading(true)
@@ -84,5 +116,9 @@ export function useHealthConnect(): UseHealthConnectResult {
     connect,
     refresh,
     openSettings,
+    steps,
+    stepsLoading,
+    stepsError,
+    refreshSteps,
   }
 }
