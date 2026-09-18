@@ -7,7 +7,6 @@ import { Select } from '@/components/ui/Select'
 import { Toggle } from '@/components/ui/Toggle'
 import { AccountSection } from '@/components/settings/AccountSection'
 import { DataPrivacySection } from '@/components/settings/DataPrivacySection'
-import { HealthDevicesSection } from '@/components/settings/HealthDevicesSection'
 import { useToast } from '@/hooks/useToast'
 
 const settingsRows = [{ id: 'goals', label: 'Goals', description: 'Target weight, calories & macros' }]
@@ -98,10 +97,6 @@ export function Settings() {
             <ChevronRight className="size-4 text-text-muted" />
           </Card>
         ))}
-      </motion.div>
-
-      <motion.div variants={staggerItem}>
-        <HealthDevicesSection />
       </motion.div>
 
       <motion.div variants={staggerItem}>
