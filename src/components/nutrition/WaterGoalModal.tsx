@@ -3,8 +3,8 @@ import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Modal } from '@/components/ui/Modal'
 import { Select } from '@/components/ui/Select'
-import type { WaterGoal, WaterUnit } from '@/types/habits'
-import { litersToMl, mlToLiters } from '@/utils/habits'
+import type { WaterGoal, WaterUnit } from '@/types/nutrition'
+import { litersToMl, mlToLiters } from '@/utils/nutrition'
 
 export interface WaterGoalModalProps {
   isOpen: boolean

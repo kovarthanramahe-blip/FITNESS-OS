@@ -1,16 +1,35 @@
 import { useSyncExternalStore } from 'react'
-import { mockFoodEntries, mockNutritionGoal } from '@/data/mockFoodEntries'
-import { pushFoodEntry, pushFoodEntryDelete, pushNutritionGoal } from '@/lib/cloudSync/push'
+import { mockFoodEntries, mockNutritionGoal, mockWaterGoal, mockWaterLogs } from '@/data/mockFoodEntries'
+import {
+  pushFoodEntry,
+  pushFoodEntryDelete,
+  pushNutritionGoal,
+  pushWaterGoal,
+  pushWaterLog,
+  pushWaterLogDelete,
+} from '@/lib/cloudSync/push'
 import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
-import type { FoodEntry, MacroTotals, MealType, NutritionGoal } from '@/types/nutrition'
-import { getDailyTotals, getEntriesForDate } from '@/utils/nutrition'
+import type { FoodEntry, MacroTotals, MealType, NutritionGoal, WaterGoal, WaterLog } from '@/types/nutrition'
+import { getDailyTotals, getEntriesForDate, getLatestWaterLogForDate } from '@/utils/nutrition'
+import { getTodayDateString } from '@/utils/dateRange'
 
 const BASE_STORAGE_KEY = 'fitness-os:nutrition-store:v1'
+
+/**
+ * Water used to be persisted inside habitStore's own localStorage blob
+ * (`fitness-os:habit-store:v1`). It's read here, once, only to migrate an
+ * existing user's water history into its new home — habitStore no longer
+ * declares these fields at all, so nothing but this migration ever reads
+ * this key for water again.
+ */
+const LEGACY_HABIT_STORE_KEY = 'fitness-os:habit-store:v1'
 
 export interface NutritionStoreState {
   entries: FoodEntry[]
   goal: NutritionGoal
+  waterLogs: WaterLog[]
+  waterGoal: WaterGoal
 }
 
 function createInitialState(): NutritionStoreState {
@@ -18,11 +37,36 @@ function createInitialState(): NutritionStoreState {
     return {
       entries: [],
       goal: mockNutritionGoal,
+      waterLogs: [],
+      waterGoal: mockWaterGoal,
     }
   }
   return {
     entries: mockFoodEntries,
     goal: mockNutritionGoal,
+    waterLogs: mockWaterLogs,
+    waterGoal: mockWaterGoal,
+  }
+}
+
+/**
+ * One-time recovery of pre-migration water data from habitStore's old
+ * localStorage blob — `null` when there's nothing to migrate (a brand new
+ * scope, or one that never used water before this domain move).
+ */
+function migrateLegacyWater(): { waterLogs: WaterLog[]; waterGoal: WaterGoal } | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(scopedStorageKey(LEGACY_HABIT_STORE_KEY))
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as { waterLogs?: WaterLog[]; waterGoal?: WaterGoal }
+    if (parsed.waterLogs === undefined && parsed.waterGoal === undefined) return null
+    return {
+      waterLogs: parsed.waterLogs ?? [],
+      waterGoal: parsed.waterGoal ?? mockWaterGoal,
+    }
+  } catch {
+    return null
   }
 }
 
@@ -32,11 +76,19 @@ function loadPersistedState(): NutritionStoreState {
 
   try {
     const raw = window.localStorage.getItem(scopedStorageKey(BASE_STORAGE_KEY))
-    if (!raw) return initial
-    const parsed = JSON.parse(raw) as Partial<NutritionStoreState>
+    const parsed = raw ? (JSON.parse(raw) as Partial<NutritionStoreState>) : null
+
+    // Only attempt migration when this store has never itself persisted a
+    // `waterLogs` key — once it has (even as `[]`), that's the real,
+    // current source of truth and legacy data must never resurface on top
+    // of it (e.g. after the user has since deleted all their water logs).
+    const legacyWater = parsed?.waterLogs === undefined ? migrateLegacyWater() : null
+
     return {
-      entries: parsed.entries ?? initial.entries,
-      goal: parsed.goal ?? initial.goal,
+      entries: parsed?.entries ?? initial.entries,
+      goal: parsed?.goal ?? initial.goal,
+      waterLogs: parsed?.waterLogs ?? legacyWater?.waterLogs ?? initial.waterLogs,
+      waterGoal: parsed?.waterGoal ?? legacyWater?.waterGoal ?? initial.waterGoal,
     }
   } catch {
     return initial
@@ -144,6 +196,36 @@ export function getDailyTotalsFromStore(date: string): MacroTotals {
 }
 
 // ---------------------------------------------------------------------------
+// Water actions — append-only, exactly like food entries above: every total
+// is derived fresh by exact date-string match (see getDailyWaterMl), never
+// carried over from or mutated by another date.
+// ---------------------------------------------------------------------------
+
+export function addWaterLog(amountMl: number, date: string = getTodayDateString()): void {
+  const newLog: WaterLog = { id: nextId('water'), date, amountMl, createdAt: new Date().toISOString() }
+  setState((current) => ({ ...current, waterLogs: [...current.waterLogs, newLog] }))
+  void pushWaterLog(newLog)
+}
+
+export function removeLatestWaterLog(date: string = getTodayDateString()): void {
+  const latest = getLatestWaterLogForDate(state.waterLogs, date)
+  setState((current) => {
+    if (!latest) return current
+    return { ...current, waterLogs: current.waterLogs.filter((log) => log.id !== latest.id) }
+  })
+  if (latest) void pushWaterLogDelete(latest.id)
+}
+
+export function setWaterGoal(goal: Partial<WaterGoal>): void {
+  setState((current) => ({ ...current, waterGoal: { ...current.waterGoal, ...goal } }))
+  void pushWaterGoal(state.waterGoal)
+}
+
+export function getWaterState(): { waterLogs: WaterLog[]; waterGoal: WaterGoal } {
+  return { waterLogs: state.waterLogs, waterGoal: state.waterGoal }
+}
+
+// ---------------------------------------------------------------------------
 // Goal actions
 // ---------------------------------------------------------------------------
 
@@ -159,25 +241,40 @@ export function getNutritionGoals(): NutritionGoal {
 export interface NutritionCloudSnapshot {
   entries: FoodEntry[]
   goal: NutritionGoal | null
+  waterLogs: WaterLog[]
+  waterGoal: WaterGoal | null
 }
 
 /**
  * Merges a cloud snapshot (pulled on sign-in) into local state: cloud
- * entries win on a shared id, any local-only entry is kept, and a null
+ * entries/logs win on a shared id, any local-only item is kept, and a null
  * cloud goal means "nothing to pull yet." Returns what still needs
  * pushing so a fresh sign-in on this device reconciles both directions.
+ * Water logs use the exact same id-based merge as food entries — never a
+ * date-based one — so merging can't cross-contaminate two different dates.
  */
-export function mergeNutritionFromCloud(cloud: NutritionCloudSnapshot): { localOnlyEntries: FoodEntry[]; goalToPush: NutritionGoal | null } {
+export function mergeNutritionFromCloud(cloud: NutritionCloudSnapshot): {
+  localOnlyEntries: FoodEntry[]
+  goalToPush: NutritionGoal | null
+  localOnlyWaterLogs: WaterLog[]
+  waterGoalToPush: WaterGoal | null
+} {
   const cloudEntryIds = new Set(cloud.entries.map((entry) => entry.id))
   const localOnlyEntries = state.entries.filter((entry) => !cloudEntryIds.has(entry.id))
   const goalToPush = cloud.goal ? null : state.goal
 
+  const cloudWaterLogIds = new Set(cloud.waterLogs.map((log) => log.id))
+  const localOnlyWaterLogs = state.waterLogs.filter((log) => !cloudWaterLogIds.has(log.id))
+  const waterGoalToPush = cloud.waterGoal ? null : state.waterGoal
+
   setState((current) => ({
     entries: [...localOnlyEntries, ...cloud.entries],
     goal: cloud.goal ?? current.goal,
+    waterLogs: [...localOnlyWaterLogs, ...cloud.waterLogs],
+    waterGoal: cloud.waterGoal ?? current.waterGoal,
   }))
 
-  return { localOnlyEntries, goalToPush }
+  return { localOnlyEntries, goalToPush, localOnlyWaterLogs, waterGoalToPush }
 }
 
 /**
@@ -194,6 +291,16 @@ export function purgeLegacyServerIdFoodEntries(serverIds: string[]): FoodEntry[]
   const removed = state.entries.filter((entry) => serverIdSet.has(entry.id))
   if (removed.length === 0) return []
   setState((current) => ({ ...current, entries: current.entries.filter((entry) => !serverIdSet.has(entry.id)) }))
+  return removed
+}
+
+/** See `purgeLegacyServerIdFoodEntries` — same mechanism, for water logs. */
+export function purgeLegacyServerIdWaterLogs(serverIds: string[]): WaterLog[] {
+  if (serverIds.length === 0) return []
+  const serverIdSet = new Set(serverIds)
+  const removed = state.waterLogs.filter((log) => serverIdSet.has(log.id))
+  if (removed.length === 0) return []
+  setState((current) => ({ ...current, waterLogs: current.waterLogs.filter((log) => !serverIdSet.has(log.id)) }))
   return removed
 }
 

@@ -21,8 +21,8 @@ export function useGamificationSync(onBadgesUnlocked?: (badges: Badge[]) => void
   const { showToast } = useToast()
   const { history, personalRecords } = useWorkoutStore()
   const { weightLogs, measurements } = useProgressStore()
-  const { entries: foodEntries } = useNutritionStore()
-  const { habits, entries: habitEntries, waterLogs, waterGoal } = useHabitStore()
+  const { entries: foodEntries, waterLogs, waterGoal } = useNutritionStore()
+  const { habits, entries: habitEntries } = useHabitStore()
 
   useEffect(() => {
     const result = syncGamification()

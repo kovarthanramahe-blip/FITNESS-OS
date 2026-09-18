@@ -2,8 +2,8 @@ import { DAILY_CHALLENGES, WEEKLY_CHALLENGES } from '@/data/gamification'
 import type { Challenge, ChallengeProgress, XPEvent, XPEventType } from '@/types/gamification'
 import type { ActivitySnapshot } from '@/utils/gamification'
 import { addDaysToDateString, getDayOfWeek, getTodayDateString } from '@/utils/dateRange'
-import { getDailyWaterMl, isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
-import { getEntriesForDate } from '@/utils/nutrition'
+import { isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
+import { getDailyWaterMl, getEntriesForDate } from '@/utils/nutrition'
 import { clamp } from '@/utils/format'
 
 function round1(value: number): number {

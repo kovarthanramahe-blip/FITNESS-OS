@@ -1,18 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import type { Habit, HabitEntry, WaterLog } from '@/types/habits'
+import type { Habit, HabitEntry } from '@/types/habits'
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
 import {
   getBestStreak,
   getCompletionRate,
   getCurrentStreak,
-  getDailyWaterMl,
   getHabitStats,
   getHabitStatusForDate,
-  getLatestWaterLogForDate,
-  getRemainingWaterMl,
   getTodaysHabitsSummary,
-  getWaterGoalPercent,
-  getWaterHistory,
   getWeeklyStrip,
   isHabitScheduledOn,
 } from './habits'
@@ -213,53 +208,5 @@ describe('getTodaysHabitsSummary', () => {
     expect(summary.scheduled).toBe(0)
     expect(summary.percent).toBe(0)
     expect(Number.isFinite(summary.percent)).toBe(true)
-  })
-})
-
-describe('water tracking', () => {
-  const logs: WaterLog[] = [
-    { id: 'w1', date: '2024-06-01', amountMl: 250, createdAt: '2024-06-01T07:00:00.000Z' },
-    { id: 'w2', date: '2024-06-01', amountMl: 500, createdAt: '2024-06-01T12:00:00.000Z' },
-    { id: 'w3', date: '2024-06-02', amountMl: 250, createdAt: '2024-06-02T07:00:00.000Z' },
-  ]
-
-  it('sums logs for a given date', () => {
-    expect(getDailyWaterMl(logs, '2024-06-01')).toBe(750)
-    expect(getDailyWaterMl(logs, '2024-06-02')).toBe(250)
-  })
-
-  it('returns 0 for a date with no logs, never negative', () => {
-    expect(getDailyWaterMl(logs, '2024-06-05')).toBe(0)
-    expect(getDailyWaterMl([], '2024-06-05')).toBe(0)
-  })
-
-  it('computes goal percent, clamped 0-100, with a zero goal reading as 0 not NaN', () => {
-    expect(getWaterGoalPercent(750, 2500)).toBe(30)
-    expect(getWaterGoalPercent(3000, 2500)).toBe(100)
-    const zeroGoal = getWaterGoalPercent(500, 0)
-    expect(zeroGoal).toBe(0)
-    expect(Number.isFinite(zeroGoal)).toBe(true)
-  })
-
-  it('computes remaining water, never negative', () => {
-    expect(getRemainingWaterMl(750, 2500)).toBe(1750)
-    expect(getRemainingWaterMl(3000, 2500)).toBe(0)
-  })
-
-  it('finds the most recently created log for "undo latest"', () => {
-    expect(getLatestWaterLogForDate(logs, '2024-06-01')?.id).toBe('w2')
-    expect(getLatestWaterLogForDate(logs, '2024-06-09')).toBeNull()
-  })
-
-  it('builds a history grouped by date across a range', () => {
-    const history = getWaterHistory(logs, 'ALL')
-    expect(history).toEqual([
-      { date: '2024-06-01', amountMl: 750 },
-      { date: '2024-06-02', amountMl: 250 },
-    ])
-  })
-
-  it('returns an empty history for no logs', () => {
-    expect(getWaterHistory([], '30D')).toEqual([])
   })
 })

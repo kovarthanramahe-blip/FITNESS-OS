@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mapFoodEntryRow } from '@/lib/repositories/cloud/mappers'
-import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
+import { mapFoodEntryRow, mapWaterLogRow } from '@/lib/repositories/cloud/mappers'
+import { resetStorageScopeForTests, scopedStorageKey, setCurrentUserId } from '@/lib/storageScope'
+import type { WaterLog } from '@/types/nutrition'
+import { getDailyWaterMl } from '@/utils/nutrition'
 import {
   addFoodEntry,
+  addWaterLog,
   clearDailyEntries,
   deleteFoodEntry,
   editFoodEntry,
@@ -12,8 +15,11 @@ import {
   getNutritionState,
   mergeNutritionFromCloud,
   purgeLegacyServerIdFoodEntries,
+  purgeLegacyServerIdWaterLogs,
+  removeLatestWaterLog,
   resetNutritionStoreForTests,
   setNutritionGoals,
+  setWaterGoal,
 } from './nutritionStore'
 
 const SAMPLE_ENTRY = {
@@ -102,6 +108,55 @@ describe('nutrition goals', () => {
   })
 })
 
+describe('water tracking', () => {
+  it('adds a water log for a date', () => {
+    addWaterLog(250, '2024-06-01')
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-06-01')).toBeGreaterThanOrEqual(250)
+  })
+
+  it('supports a custom amount, not just the 250/500 quick-adds', () => {
+    addWaterLog(137, '2024-06-01')
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-06-01')).toBeGreaterThanOrEqual(137)
+  })
+
+  it('removes the latest water log for a date', () => {
+    resetNutritionStoreForTests()
+    const before = getDailyWaterMl(getNutritionState().waterLogs, '2024-06-01')
+    addWaterLog(250, '2024-06-01')
+    addWaterLog(500, '2024-06-01')
+
+    removeLatestWaterLog('2024-06-01')
+
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-06-01')).toBe(before + 250)
+  })
+
+  it('does nothing when removing from a date with no logs', () => {
+    const countBefore = getNutritionState().waterLogs.length
+    removeLatestWaterLog('2099-01-01')
+    expect(getNutritionState().waterLogs).toHaveLength(countBefore)
+  })
+
+  it('updates the water goal', () => {
+    setWaterGoal({ goalMl: 3000 })
+    expect(getNutritionState().waterGoal.goalMl).toBe(3000)
+  })
+
+  it('reads zero for a date with no water logged at all, never negative or NaN', () => {
+    setCurrentUserId('user-zero-water')
+    resetNutritionStoreForTests()
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-06-01')).toBe(0)
+    resetStorageScopeForTests()
+  })
+
+  it('supports multiple dates independently', () => {
+    addWaterLog(300, '2024-07-01')
+    addWaterLog(400, '2024-07-02')
+
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-07-01')).toBe(300)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, '2024-07-02')).toBe(400)
+  })
+})
+
 describe('persistence', () => {
   it('persists entries and goals to localStorage', () => {
     addFoodEntry(SAMPLE_ENTRY)
@@ -123,6 +178,17 @@ describe('persistence', () => {
     const parsed = JSON.parse(raw!)
     expect(parsed.entries).toHaveLength(countAfterAdd)
   })
+
+  it('persists water logs and goal alongside entries', () => {
+    addWaterLog(250, '2024-06-01')
+    setWaterGoal({ goalMl: 3000 })
+
+    const raw = window.localStorage.getItem('fitness-os:nutrition-store:v1')
+    expect(raw).toBeTruthy()
+    const parsed = JSON.parse(raw!)
+    expect(parsed.waterGoal.goalMl).toBe(3000)
+    expect(parsed.waterLogs.some((log: { amountMl: number }) => log.amountMl === 250)).toBe(true)
+  })
 })
 
 describe('authenticated zero-state', () => {
@@ -131,11 +197,13 @@ describe('authenticated zero-state', () => {
     resetNutritionStoreForTests()
   })
 
-  it('starts a new authenticated user with no food entries', () => {
+  it('starts a new authenticated user with no food entries or water logs', () => {
     setCurrentUserId('user-1')
     resetNutritionStoreForTests()
 
-    expect(getNutritionState().entries).toEqual([])
+    const state = getNutritionState()
+    expect(state.entries).toEqual([])
+    expect(state.waterLogs).toEqual([])
   })
 
   it('keeps guest/demo mode seeded with mock data', () => {
@@ -173,7 +241,7 @@ describe('mergeNutritionFromCloud', () => {
     const localOnlyId = getNutritionState().entries[0]!.id
     const cloudEntry = { ...SAMPLE_ENTRY, id: 'cloud-1', createdAt: '2024-06-01T00:00:00.000Z' }
 
-    const { localOnlyEntries } = mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+    const { localOnlyEntries } = mergeNutritionFromCloud({ entries: [cloudEntry], goal: null, waterLogs: [], waterGoal: null })
 
     expect(localOnlyEntries.map((e) => e.id)).toEqual([localOnlyId])
     expect(getNutritionState().entries.map((e) => e.id).sort()).toEqual([localOnlyId, 'cloud-1'].sort())
@@ -184,7 +252,7 @@ describe('mergeNutritionFromCloud', () => {
     const sharedId = getNutritionState().entries[0]!.id
     const cloudVersion = { ...SAMPLE_ENTRY, id: sharedId, calories: 999, createdAt: '2024-06-01T00:00:00.000Z' }
 
-    mergeNutritionFromCloud({ entries: [cloudVersion], goal: null })
+    mergeNutritionFromCloud({ entries: [cloudVersion], goal: null, waterLogs: [], waterGoal: null })
 
     const entries = getNutritionState().entries
     expect(entries).toHaveLength(1)
@@ -192,14 +260,35 @@ describe('mergeNutritionFromCloud', () => {
   })
 
   it('a null cloud goal keeps the local goal and reports it for push-back', () => {
-    const { goalToPush } = mergeNutritionFromCloud({ entries: [], goal: null })
+    const { goalToPush } = mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [], waterGoal: null })
     expect(goalToPush).toEqual(getNutritionState().goal)
   })
 
   it('a present cloud goal replaces the local goal', () => {
     const cloudGoal = { dailyCalories: 2500, proteinGrams: 180, carbohydrateGrams: 250, fatGrams: 80 }
-    mergeNutritionFromCloud({ entries: [], goal: cloudGoal })
+    mergeNutritionFromCloud({ entries: [], goal: cloudGoal, waterLogs: [], waterGoal: null })
     expect(getNutritionState().goal).toEqual(cloudGoal)
+  })
+
+  it('cloud wins on a shared water log id — never a duplicate', () => {
+    addWaterLog(250, '2024-06-01')
+    const sharedId = getNutritionState().waterLogs[0]!.id
+    const cloudLog = { id: sharedId, date: '2024-06-01', amountMl: 500, createdAt: '2024-06-01T00:00:00.000Z' }
+
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [cloudLog], waterGoal: null })
+
+    expect(getNutritionState().waterLogs).toEqual([cloudLog])
+  })
+
+  it('a null cloud water goal keeps the local one and reports it for push-back', () => {
+    const { waterGoalToPush } = mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [], waterGoal: null })
+    expect(waterGoalToPush).toEqual(getNutritionState().waterGoal)
+  })
+
+  it('a present cloud water goal replaces the local one', () => {
+    const cloudGoal = { goalMl: 3500, preferredUnit: 'ml' as const }
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [], waterGoal: cloudGoal })
+    expect(getNutritionState().waterGoal).toEqual(cloudGoal)
   })
 
   // Regression for the double-counting bug: a food entry already pushed to
@@ -230,12 +319,12 @@ describe('mergeNutritionFromCloud', () => {
       created_at: '2024-06-01T00:00:00.000Z',
     })
 
-    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null, waterLogs: [], waterGoal: null })
     expect(getNutritionState().entries).toHaveLength(1)
 
     // Close the app and reopen it (repeatedly) — the count must never grow.
-    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
-    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null })
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null, waterLogs: [], waterGoal: null })
+    mergeNutritionFromCloud({ entries: [cloudEntry], goal: null, waterLogs: [], waterGoal: null })
 
     expect(getNutritionState().entries).toHaveLength(1)
     expect(getNutritionState().entries[0]!.id).toBe(localEntryId)
@@ -262,7 +351,7 @@ describe('purgeLegacyServerIdFoodEntries (one-time local-duplicate cleanup)', ()
   it('removes a legacy server-id-keyed food entry while keeping the canonical client-id copy', () => {
     addFoodEntry(SAMPLE_ENTRY)
     const canonical = getNutritionState().entries[0]!
-    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null })
+    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null, waterLogs: [], waterGoal: null })
     expect(getNutritionState().entries).toHaveLength(2)
 
     const removed = purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
@@ -275,7 +364,7 @@ describe('purgeLegacyServerIdFoodEntries (one-time local-duplicate cleanup)', ()
   it('running the purge twice makes no further changes the second time', () => {
     addFoodEntry(SAMPLE_ENTRY)
     const canonical = getNutritionState().entries[0]!
-    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null })
+    mergeNutritionFromCloud({ entries: [{ ...canonical, id: 'server-generated-uuid' }], goal: null, waterLogs: [], waterGoal: null })
 
     purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
     const secondRun = purgeLegacyServerIdFoodEntries(['server-generated-uuid'])
@@ -288,7 +377,7 @@ describe('purgeLegacyServerIdFoodEntries (one-time local-duplicate cleanup)', ()
   it('never removes two legitimate entries that merely look alike', () => {
     const entryA = { ...SAMPLE_ENTRY, id: 'food-client-a', createdAt: '2024-06-01T08:00:00.000Z' }
     const entryB = { ...SAMPLE_ENTRY, id: 'food-client-b', createdAt: '2024-06-01T08:00:00.000Z' }
-    mergeNutritionFromCloud({ entries: [entryA, entryB], goal: null })
+    mergeNutritionFromCloud({ entries: [entryA, entryB], goal: null, waterLogs: [], waterGoal: null })
 
     const removed = purgeLegacyServerIdFoodEntries(['unrelated-server-uuid'])
 
@@ -307,25 +396,90 @@ describe('purgeLegacyServerIdFoodEntries (one-time local-duplicate cleanup)', ()
   })
 })
 
+describe('purgeLegacyServerIdWaterLogs (one-time local-duplicate cleanup)', () => {
+  beforeEach(() => {
+    setCurrentUserId('user-purge-water-test')
+    resetNutritionStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('does nothing for a fresh store with no water logs at all', () => {
+    expect(purgeLegacyServerIdWaterLogs(['server-uuid'])).toEqual([])
+    expect(getNutritionState().waterLogs).toEqual([])
+  })
+
+  it('removes a legacy server-id-keyed water log while keeping the canonical client-id copy', () => {
+    addWaterLog(250, '2024-06-01')
+    const canonical = getNutritionState().waterLogs[0]!
+    mergeNutritionFromCloud({
+      entries: [],
+      goal: null,
+      waterLogs: [{ ...canonical, id: 'server-generated-uuid' }],
+      waterGoal: null,
+    })
+    expect(getNutritionState().waterLogs).toHaveLength(2)
+
+    const removed = purgeLegacyServerIdWaterLogs(['server-generated-uuid'])
+
+    expect(removed).toEqual([{ ...canonical, id: 'server-generated-uuid' }])
+    expect(getNutritionState().waterLogs).toEqual([canonical])
+  })
+
+  it('running the purge twice makes no further changes the second time', () => {
+    addWaterLog(250, '2024-06-01')
+    const canonical = getNutritionState().waterLogs[0]!
+    mergeNutritionFromCloud({
+      entries: [],
+      goal: null,
+      waterLogs: [{ ...canonical, id: 'server-generated-uuid' }],
+      waterGoal: null,
+    })
+
+    purgeLegacyServerIdWaterLogs(['server-generated-uuid'])
+    const secondRun = purgeLegacyServerIdWaterLogs(['server-generated-uuid'])
+
+    expect(secondRun).toEqual([])
+    expect(getNutritionState().waterLogs).toEqual([canonical])
+  })
+
+  it('never removes a local-only water log whose id was never seen on the server', () => {
+    addWaterLog(250, '2024-06-01')
+    const before = getNutritionState().waterLogs
+
+    purgeLegacyServerIdWaterLogs(['a-server-uuid-that-is-not-this-record'])
+
+    expect(getNutritionState().waterLogs).toBe(before)
+  })
+})
+
 describe('local persistence survives closing and reopening the app without duplicating records', () => {
   afterEach(() => {
     resetStorageScopeForTests()
   })
 
-  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows entries', async () => {
+  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows entries or water logs', async () => {
     vi.resetModules()
     const first = await import('./nutritionStore')
     first.resetNutritionStoreForTests()
     first.addFoodEntry(SAMPLE_ENTRY)
-    const afterFirstOpen = first.getNutritionState().entries.length
+    first.addWaterLog(250, '2024-06-01')
+    const afterFirstOpen = {
+      entries: first.getNutritionState().entries.length,
+      waterLogs: first.getNutritionState().waterLogs.length,
+    }
 
     vi.resetModules()
     const second = await import('./nutritionStore')
-    expect(second.getNutritionState().entries).toHaveLength(afterFirstOpen)
+    expect(second.getNutritionState().entries).toHaveLength(afterFirstOpen.entries)
+    expect(second.getNutritionState().waterLogs).toHaveLength(afterFirstOpen.waterLogs)
 
     vi.resetModules()
     const third = await import('./nutritionStore')
-    expect(third.getNutritionState().entries).toHaveLength(afterFirstOpen)
+    expect(third.getNutritionState().entries).toHaveLength(afterFirstOpen.entries)
+    expect(third.getNutritionState().waterLogs).toHaveLength(afterFirstOpen.waterLogs)
   })
 })
 
@@ -391,5 +545,218 @@ describe('nutrition date isolation (yesterday != today)', () => {
 
     expect(getEntriesForDateFromStore(TODAY)).toHaveLength(0)
     expect(getDailyTotalsFromStore(YESTERDAY).calories).toBe(1800)
+  })
+})
+
+/**
+ * Regression suite for the real-device water bug: water still combining
+ * across dates on the S24 Ultra. Water now lives in this store, following
+ * the exact same append-only, exact-date-string model as food entries
+ * above — every date's total is derived fresh by filtering on `date`,
+ * never carried over from or mutated by another date's writes, across
+ * local persistence, app reload, and cloud sync alike.
+ */
+describe('water date isolation regression (bug fix)', () => {
+  const YESTERDAY = '2026-09-17'
+  const TODAY = '2026-09-18'
+
+  // A clean, un-seeded slate — the default (unauthenticated) store carries
+  // demo water logs for recent relative dates, which would otherwise add
+  // to these exact-ml assertions.
+  beforeEach(() => {
+    setCurrentUserId('user-water-regression')
+    resetNutritionStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetNutritionStoreForTests()
+  })
+
+  it('1. yesterday = 3500 ml', () => {
+    addWaterLog(3500, YESTERDAY)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
+  })
+
+  it('2. today = 4000 ml', () => {
+    addWaterLog(4000, TODAY)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('3. adding 500 ml today does not change yesterday: yesterday stays 3500, today becomes 4500', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    addWaterLog(500, TODAY)
+
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4500)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
+  })
+
+  it('4. adding 500 ml yesterday does not change today: yesterday becomes 4000, today stays 4500', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+    addWaterLog(500, TODAY) // today = 4500, matching the scenario chain above
+
+    addWaterLog(500, YESTERDAY)
+
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(4000)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4500)
+  })
+
+  it('5. app reload (re-reading localStorage) preserves both values independently', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    const raw = window.localStorage.getItem(scopedStorageKey('fitness-os:nutrition-store:v1'))
+    const parsed = JSON.parse(raw!) as { waterLogs: WaterLog[] }
+
+    expect(getDailyWaterMl(parsed.waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(parsed.waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('6. switching dates repeatedly never cross-contaminates totals', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    // Simulate the user bouncing back and forth between Previous day/Today
+    // in the UI — reading a date's total must never mutate any date.
+    for (let i = 0; i < 5; i++) {
+      expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
+      expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4000)
+    }
+  })
+
+  it('7. zero water for a date with no logs, never inherited from another date', () => {
+    addWaterLog(4000, TODAY)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(0)
+  })
+
+  it('8. cloud push/hydration preserves both values independently', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+    const [localYesterdayId, localTodayId] = getNutritionState().waterLogs.map((log) => log.id)
+
+    // Simulate what comes back from Supabase on the next sign-in: the same
+    // two logs, round-tripped through the real mapper, keyed by their
+    // stable client ids (never the server row id).
+    const cloudYesterday = mapWaterLogRow({
+      id: 'server-uuid-yesterday',
+      user_id: 'user-water-regression',
+      client_log_id: localYesterdayId!,
+      log_date: YESTERDAY,
+      amount_ml: 3500,
+      created_at: `${YESTERDAY}T08:00:00.000Z`,
+    })
+    const cloudToday = mapWaterLogRow({
+      id: 'server-uuid-today',
+      user_id: 'user-water-regression',
+      client_log_id: localTodayId!,
+      log_date: TODAY,
+      amount_ml: 4000,
+      created_at: `${TODAY}T08:00:00.000Z`,
+    })
+
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('9. no duplicate water records are created during repeated hydration (app close/reopen)', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+    const [localYesterdayId, localTodayId] = getNutritionState().waterLogs.map((log) => log.id)
+
+    const cloudYesterday = mapWaterLogRow({
+      id: 'server-uuid-yesterday',
+      user_id: 'user-water-regression',
+      client_log_id: localYesterdayId!,
+      log_date: YESTERDAY,
+      amount_ml: 3500,
+      created_at: `${YESTERDAY}T08:00:00.000Z`,
+    })
+    const cloudToday = mapWaterLogRow({
+      id: 'server-uuid-today',
+      user_id: 'user-water-regression',
+      client_log_id: localTodayId!,
+      log_date: TODAY,
+      amount_ml: 4000,
+      created_at: `${TODAY}T08:00:00.000Z`,
+    })
+
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+    mergeNutritionFromCloud({ entries: [], goal: null, waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+
+    expect(getNutritionState().waterLogs).toHaveLength(2)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4000)
+  })
+})
+
+/**
+ * Migration coverage: water used to be persisted inside habitStore's own
+ * localStorage blob (`fitness-os:habit-store:v1`). Moving it into this
+ * store must not silently discard an existing user's water history — it's
+ * recovered once, on the first load of a scope that has never itself
+ * persisted a `waterLogs` key, and never resurfaces once this store has
+ * its own (even empty) water state.
+ */
+describe('water migration from the legacy habit-store key', () => {
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetNutritionStoreForTests()
+  })
+
+  it('recovers existing water logs and goal from the legacy key on first load', () => {
+    setCurrentUserId('user-migration-test')
+    resetNutritionStoreForTests()
+
+    const legacyWaterLogs: WaterLog[] = [
+      { id: 'legacy-w1', date: '2024-06-01', amountMl: 750, createdAt: '2024-06-01T08:00:00.000Z' },
+    ]
+    const legacyWaterGoal = { goalMl: 2800, preferredUnit: 'ml' as const }
+    window.localStorage.setItem(
+      scopedStorageKey('fitness-os:habit-store:v1'),
+      JSON.stringify({ habits: [], entries: [], waterLogs: legacyWaterLogs, waterGoal: legacyWaterGoal }),
+    )
+
+    // Re-trigger loadPersistedState the same way a real account switch
+    // does, landing back on the same scope so the legacy key above is seen.
+    setCurrentUserId('user-migration-transition')
+    setCurrentUserId('user-migration-test')
+
+    expect(getNutritionState().waterLogs).toEqual(legacyWaterLogs)
+    expect(getNutritionState().waterGoal).toEqual(legacyWaterGoal)
+  })
+
+  it('never re-migrates once this store has persisted its own water state, even if now empty', () => {
+    setCurrentUserId('user-migration-test-2')
+    resetNutritionStoreForTests()
+    addFoodEntry(SAMPLE_ENTRY) // persists this store's own (empty) waterLogs: []
+
+    const legacyWaterLogs: WaterLog[] = [
+      { id: 'legacy-w2', date: '2024-06-01', amountMl: 999, createdAt: '2024-06-01T08:00:00.000Z' },
+    ]
+    window.localStorage.setItem(
+      scopedStorageKey('fitness-os:habit-store:v1'),
+      JSON.stringify({ waterLogs: legacyWaterLogs, waterGoal: null }),
+    )
+
+    setCurrentUserId('user-migration-transition-2')
+    setCurrentUserId('user-migration-test-2')
+
+    expect(getNutritionState().waterLogs).toEqual([])
+  })
+
+  it('is a no-op when there is no legacy key at all', () => {
+    setCurrentUserId('user-migration-test-3')
+    resetNutritionStoreForTests()
+
+    setCurrentUserId('user-migration-transition-3')
+    setCurrentUserId('user-migration-test-3')
+
+    expect(getNutritionState().waterLogs).toEqual([])
   })
 })

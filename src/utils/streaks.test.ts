@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { getHabitConsistencyStreak, getStreakSummary, getWaterStreak } from './streaks'
 import type { ActivitySnapshot } from './gamification'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { WaterGoal, WaterLog } from '@/types/nutrition'
 
 const NOW = new Date('2024-06-10T12:00:00.000Z') // a Monday
 

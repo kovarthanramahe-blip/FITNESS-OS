@@ -48,6 +48,12 @@ export const localNutritionRepository: NutritionRepository = {
   async getGoal() {
     return getNutritionState().goal
   },
+  async getWaterLogs() {
+    return getNutritionState().waterLogs
+  },
+  async getWaterGoal() {
+    return getNutritionState().waterGoal
+  },
 }
 
 export const localHabitRepository: HabitRepository = {
@@ -56,12 +62,6 @@ export const localHabitRepository: HabitRepository = {
   },
   async getEntries() {
     return getHabitState().entries
-  },
-  async getWaterLogs() {
-    return getHabitState().waterLogs
-  },
-  async getWaterGoal() {
-    return getHabitState().waterGoal
   },
 }
 

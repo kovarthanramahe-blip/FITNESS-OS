@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { addWeightLog, getProgressState, resetProgressStoreForTests } from '@/lib/progressStore'
-import { addFoodEntry, getNutritionState, resetNutritionStoreForTests } from '@/lib/nutritionStore'
+import { addFoodEntry, addWaterLog, getNutritionState, resetNutritionStoreForTests } from '@/lib/nutritionStore'
 import { addHabit, getHabitState, resetHabitStoreForTests } from '@/lib/habitStore'
 import { getGamificationState, resetGamificationStoreForTests, syncGamification } from '@/lib/gamificationStore'
 import { completeSession, getWorkoutState, resetWorkoutStoreForTests, startSession } from '@/lib/workoutStore'
@@ -55,12 +55,14 @@ describe('resetAllFitnessData', () => {
       reminderEnabled: false,
       active: true,
     })
+    addWaterLog(250, '2024-06-01')
     syncGamification(new Date('2024-06-01'))
 
     expect(getWorkoutState().history.length).toBeGreaterThan(0)
     expect(getProgressState().weightLogs.length).toBeGreaterThan(0)
     expect(getNutritionState().entries.length).toBeGreaterThan(0)
     expect(getHabitState().habits.length).toBeGreaterThan(0)
+    expect(getNutritionState().waterLogs.length).toBeGreaterThan(0)
 
     await resetAllFitnessData()
 
@@ -71,7 +73,7 @@ describe('resetAllFitnessData', () => {
     expect(getNutritionState().entries).toEqual([])
     expect(getHabitState().habits).toEqual([])
     expect(getHabitState().entries).toEqual([])
-    expect(getHabitState().waterLogs).toEqual([])
+    expect(getNutritionState().waterLogs).toEqual([])
     expect(getGamificationState().xpEvents).toEqual([])
     expect(getGamificationState().earnedBadges).toEqual([])
     expect(getGamificationState().completedChallengeIds).toEqual([])

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { getGamificationState, getGamificationStats, mergeGamificationFromCloud, resetGamificationStoreForTests, syncGamification } from './gamificationStore'
-import { addWaterLog, completeHabit, getHabitState, resetHabitStoreForTests } from './habitStore'
-import { addFoodEntry, getNutritionState, resetNutritionStoreForTests } from './nutritionStore'
+import { completeHabit, getHabitState, resetHabitStoreForTests } from './habitStore'
+import { addFoodEntry, addWaterLog, getNutritionState, resetNutritionStoreForTests } from './nutritionStore'
 import { addWeightLog, getProgressState, resetProgressStoreForTests } from './progressStore'
 import { getWorkoutState, resetWorkoutStoreForTests } from './workoutStore'
 
@@ -67,7 +67,7 @@ describe('syncGamification — reads from the existing domain stores', () => {
 
   it('awards XP when the daily water goal is reached', () => {
     syncGamification()
-    const goalMl = getHabitState().waterGoal.goalMl
+    const goalMl = getNutritionState().waterGoal.goalMl
     addWaterLog(goalMl, '2024-06-01')
     const result = syncGamification()
     expect(result.newXpEvents.some((event) => event.type === 'water_goal_reached')).toBe(true)

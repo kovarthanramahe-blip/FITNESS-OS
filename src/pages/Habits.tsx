@@ -13,27 +13,26 @@ import { HabitsSummary } from '@/components/habits/HabitsSummary'
 import { ReminderCard } from '@/components/habits/ReminderCard'
 import { ReminderModal } from '@/components/habits/ReminderModal'
 import type { ReminderModalSaveInput } from '@/components/habits/ReminderModal'
-import { WaterGoalModal } from '@/components/habits/WaterGoalModal'
-import { WaterTracker } from '@/components/habits/WaterTracker'
+import { WaterGoalModal } from '@/components/nutrition/WaterGoalModal'
+import { WaterTracker } from '@/components/nutrition/WaterTracker'
 import {
   addHabit,
-  addWaterLog,
   completeHabit,
   deleteHabit,
   editHabit,
-  removeLatestWaterLog,
-  setWaterGoal,
   toggleHabitActive,
   uncompleteHabit,
   useHabitStore,
 } from '@/lib/habitStore'
+import { addWaterLog, removeLatestWaterLog, setWaterGoal, useNutritionStore } from '@/lib/nutritionStore'
 import type { Habit, Reminder } from '@/types/habits'
 import { getTodaysHabitsSummary } from '@/utils/habits'
 
 const REMINDER_CATEGORIES = new Set(['supplements', 'custom'])
 
 export function Habits() {
-  const { habits, entries, waterLogs, waterGoal } = useHabitStore()
+  const { habits, entries } = useHabitStore()
+  const { waterLogs, waterGoal } = useNutritionStore()
 
   const [isHabitModalOpen, setIsHabitModalOpen] = useState(false)
   const [editingHabit, setEditingHabit] = useState<Habit | null>(null)

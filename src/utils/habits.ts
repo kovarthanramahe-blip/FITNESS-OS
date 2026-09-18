@@ -1,5 +1,5 @@
-import type { Habit, HabitDayStatus, HabitEntry, HabitSchedule, HabitStats, WaterLog } from '@/types/habits'
-import { addDaysToDateString, getDayOfWeek, getTodayDateString, isWithinRange } from '@/utils/dateRange'
+import type { Habit, HabitDayStatus, HabitEntry, HabitSchedule, HabitStats } from '@/types/habits'
+import { addDaysToDateString, getDayOfWeek, getTodayDateString } from '@/utils/dateRange'
 import type { TimeRange } from '@/types/shared'
 import { clamp } from '@/utils/format'
 
@@ -256,64 +256,4 @@ export function getWeeklyStrip(habit: Habit, entries: HabitEntry[], now: Date = 
     const date = addDaysToDateString(monday, index)
     return { date, status: getHabitStatusForDate(habit, entries, date) }
   })
-}
-
-// ---------------------------------------------------------------------------
-// Water tracking
-// ---------------------------------------------------------------------------
-
-export function getWaterLogsForDate(logs: WaterLog[], dateStr: string): WaterLog[] {
-  return logs.filter((log) => log.date === dateStr)
-}
-
-/** Always derived from logs, never stored directly — and never negative. */
-export function getDailyWaterMl(logs: WaterLog[], dateStr: string): number {
-  return Math.max(
-    getWaterLogsForDate(logs, dateStr).reduce((total, log) => total + log.amountMl, 0),
-    0,
-  )
-}
-
-export function getWaterGoalPercent(consumedMl: number, goalMl: number): number {
-  if (goalMl <= 0) return 0
-  return round1(clamp((consumedMl / goalMl) * 100, 0, 100))
-}
-
-export function getRemainingWaterMl(consumedMl: number, goalMl: number): number {
-  return Math.max(goalMl - consumedMl, 0)
-}
-
-export function mlToLiters(ml: number): number {
-  return round1(ml / 1000)
-}
-
-export function litersToMl(liters: number): number {
-  return Math.round(liters * 1000)
-}
-
-/** The most recently created entry for a date — what "undo latest" removes. */
-/**
- * The most recently added entry for a date — what "undo latest" removes.
- * Uses array/insertion order rather than comparing `createdAt` strings,
- * since two quick log actions can share the same millisecond timestamp.
- */
-export function getLatestWaterLogForDate(logs: WaterLog[], dateStr: string): WaterLog | null {
-  const dayLogs = getWaterLogsForDate(logs, dateStr)
-  return dayLogs.length === 0 ? null : dayLogs[dayLogs.length - 1]!
-}
-
-export interface WaterHistoryPoint {
-  date: string
-  amountMl: number
-}
-
-export function getWaterHistory(logs: WaterLog[], range: TimeRange, now: Date = new Date()): WaterHistoryPoint[] {
-  const inRange = logs.filter((log) => isWithinRange(log.date, range, now))
-  const byDate = new Map<string, number>()
-  for (const log of inRange) {
-    byDate.set(log.date, (byDate.get(log.date) ?? 0) + log.amountMl)
-  }
-  return [...byDate.entries()]
-    .map(([date, amountMl]) => ({ date, amountMl }))
-    .sort((a, b) => a.date.localeCompare(b.date))
 }

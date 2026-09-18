@@ -84,12 +84,12 @@ describe('cloud repositories', () => {
     await cloud.createCloudProgressRepository(userId).getMeasurementServerIds()
     await cloud.createCloudNutritionRepository(userId).getFoodEntries()
     await cloud.createCloudNutritionRepository(userId).getFoodEntryServerIds()
+    await cloud.createCloudNutritionRepository(userId).getWaterLogs()
+    await cloud.createCloudNutritionRepository(userId).getWaterLogServerIds()
     await cloud.createCloudHabitRepository(userId).getHabits()
     await cloud.createCloudHabitRepository(userId).getEntries()
-    await cloud.createCloudHabitRepository(userId).getWaterLogs()
     await cloud.createCloudHabitRepository(userId).getHabitServerIdToClientId()
     await cloud.createCloudHabitRepository(userId).getHabitEntryServerIds()
-    await cloud.createCloudHabitRepository(userId).getWaterLogServerIds()
     await cloud.createCloudGamificationRepository(userId).getXpEvents()
     await cloud.createCloudGamificationRepository(userId).getEarnedBadges()
     await cloud.createCloudGamificationRepository(userId).getCompletedChallengeIds()
@@ -529,17 +529,24 @@ describe('cloud repository writes', () => {
       })
     })
 
-    it('getHabitEntryServerIds and getWaterLogServerIds read raw ids scoped by user_id', async () => {
+    it('getHabitEntryServerIds reads raw ids scoped by user_id', async () => {
       const fake = createFakeSupabase({
         habit_entries: [{ data: [{ id: 'e1' }], error: null }],
-        water_logs: [{ data: [{ id: 'wl1' }], error: null }],
       })
       vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
       const { createCloudHabitRepository } = await import('./index')
-      const repo = createCloudHabitRepository('u1')
 
-      expect(await repo.getHabitEntryServerIds()).toEqual(['e1'])
-      expect(await repo.getWaterLogServerIds()).toEqual(['wl1'])
+      expect(await createCloudHabitRepository('u1').getHabitEntryServerIds()).toEqual(['e1'])
+    })
+
+    it('getWaterLogServerIds reads raw ids scoped by user_id', async () => {
+      const fake = createFakeSupabase({
+        water_logs: [{ data: [{ id: 'wl1' }], error: null }],
+      })
+      vi.doMock('@/lib/supabase', () => ({ supabase: fake }))
+      const { createCloudNutritionRepository } = await import('./index')
+
+      expect(await createCloudNutritionRepository('u1').getWaterLogServerIds()).toEqual(['wl1'])
     })
 
     it('propagates an error instead of swallowing it', async () => {

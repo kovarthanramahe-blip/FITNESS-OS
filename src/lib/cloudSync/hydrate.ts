@@ -15,13 +15,12 @@ import {
   pushXpEvents,
 } from '@/lib/cloudSync/push'
 import { getGamificationState, mergeGamificationFromCloud } from '@/lib/gamificationStore'
+import { mergeHabitFromCloud, purgeLegacyServerIdHabitEntries, purgeLegacyServerIdHabits } from '@/lib/habitStore'
 import {
-  mergeHabitFromCloud,
-  purgeLegacyServerIdHabitEntries,
-  purgeLegacyServerIdHabits,
+  mergeNutritionFromCloud,
+  purgeLegacyServerIdFoodEntries,
   purgeLegacyServerIdWaterLogs,
-} from '@/lib/habitStore'
-import { mergeNutritionFromCloud, purgeLegacyServerIdFoodEntries } from '@/lib/nutritionStore'
+} from '@/lib/nutritionStore'
 import { mergeProgressFromCloud, purgeLegacyServerIdMeasurements, purgeLegacyServerIdWeightLogs } from '@/lib/progressStore'
 import {
   createCloudGamificationRepository,
@@ -118,19 +117,31 @@ async function hydrateProgress(userId: string): Promise<void> {
 async function hydrateNutrition(userId: string): Promise<void> {
   try {
     const repo = createCloudNutritionRepository(userId)
-    const [entries, goal, legacyFoodEntryServerIds] = await Promise.all([
+    const [entries, goal, waterLogs, waterGoal, legacyFoodEntryServerIds, legacyWaterLogServerIds] = await Promise.all([
       repo.getFoodEntries(),
       repo.getGoal(),
+      repo.getWaterLogs(),
+      repo.getWaterGoal(),
       repo.getFoodEntryServerIds(),
+      repo.getWaterLogServerIds(),
     ])
-    const { localOnlyEntries, goalToPush } = mergeNutritionFromCloud({ entries, goal })
+    const { localOnlyEntries, goalToPush, localOnlyWaterLogs, waterGoalToPush } = mergeNutritionFromCloud({
+      entries,
+      goal,
+      waterLogs,
+      waterGoal,
+    })
     purgeLegacyServerIdFoodEntries(legacyFoodEntryServerIds)
+    purgeLegacyServerIdWaterLogs(legacyWaterLogServerIds)
 
     // See hydrateWorkout's comment: never re-push a purged legacy id.
     const legacyIds = new Set(legacyFoodEntryServerIds)
+    const legacyWaterLogIds = new Set(legacyWaterLogServerIds)
     await Promise.all([
       ...localOnlyEntries.filter((entry) => !legacyIds.has(entry.id)).map((entry) => pushFoodEntry(entry)),
+      ...localOnlyWaterLogs.filter((log) => !legacyWaterLogIds.has(log.id)).map((log) => pushWaterLog(log)),
       goalToPush ? pushNutritionGoal(goalToPush) : Promise.resolve(),
+      waterGoalToPush ? pushWaterGoal(waterGoalToPush) : Promise.resolve(),
     ])
   } catch (error) {
     console.error('[Fitness OS] Failed to hydrate nutrition data from cloud:', error)
@@ -140,25 +151,15 @@ async function hydrateNutrition(userId: string): Promise<void> {
 async function hydrateHabits(userId: string): Promise<void> {
   try {
     const repo = createCloudHabitRepository(userId)
-    const [habits, entries, waterLogs, waterGoal, habitServerIdToClientId, legacyEntryServerIds, legacyWaterLogServerIds] =
-      await Promise.all([
-        repo.getHabits(),
-        repo.getEntries(),
-        repo.getWaterLogs(),
-        repo.getWaterGoal(),
-        repo.getHabitServerIdToClientId(),
-        repo.getHabitEntryServerIds(),
-        repo.getWaterLogServerIds(),
-      ])
-    const { localOnlyHabits, localOnlyEntries, localOnlyWaterLogs, waterGoalToPush } = mergeHabitFromCloud({
-      habits,
-      entries,
-      waterLogs,
-      waterGoal,
-    })
+    const [habits, entries, habitServerIdToClientId, legacyEntryServerIds] = await Promise.all([
+      repo.getHabits(),
+      repo.getEntries(),
+      repo.getHabitServerIdToClientId(),
+      repo.getHabitEntryServerIds(),
+    ])
+    const { localOnlyHabits, localOnlyEntries } = mergeHabitFromCloud({ habits, entries })
     purgeLegacyServerIdHabits(Object.keys(habitServerIdToClientId))
     purgeLegacyServerIdHabitEntries(legacyEntryServerIds, habitServerIdToClientId)
-    purgeLegacyServerIdWaterLogs(legacyWaterLogServerIds)
 
     // See hydrateWorkout's comment: never re-push a purged legacy id. An
     // entry paired with a legacy-id habit is excluded too, since
@@ -167,14 +168,11 @@ async function hydrateHabits(userId: string): Promise<void> {
     // habit row in the cloud.
     const legacyHabitIds = new Set(Object.keys(habitServerIdToClientId))
     const legacyEntryIds = new Set(legacyEntryServerIds)
-    const legacyWaterLogIds = new Set(legacyWaterLogServerIds)
     await Promise.all([
       ...localOnlyHabits.filter((habit) => !legacyHabitIds.has(habit.id)).map((habit) => pushHabit(habit)),
       ...localOnlyEntries
         .filter(({ entry, habit }) => !legacyEntryIds.has(entry.id) && !legacyHabitIds.has(habit.id))
         .map(({ entry, habit }) => pushHabitEntry(entry, habit)),
-      ...localOnlyWaterLogs.filter((log) => !legacyWaterLogIds.has(log.id)).map((log) => pushWaterLog(log)),
-      waterGoalToPush ? pushWaterGoal(waterGoalToPush) : Promise.resolve(),
     ])
   } catch (error) {
     console.error('[Fitness OS] Failed to hydrate habit data from cloud:', error)

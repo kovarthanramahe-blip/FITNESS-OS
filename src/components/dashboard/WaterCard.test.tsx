@@ -2,20 +2,20 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { WaterCard } from './WaterCard'
-import { getHabitState, resetHabitStoreForTests, useHabitStore } from '@/lib/habitStore'
-import type { WaterGoal } from '@/types/habits'
-import { getDailyWaterMl, mlToLiters } from '@/utils/habits'
+import { getNutritionState, resetNutritionStoreForTests, useNutritionStore } from '@/lib/nutritionStore'
+import type { WaterGoal } from '@/types/nutrition'
+import { getDailyWaterMl, mlToLiters } from '@/utils/nutrition'
 import { getTodayDateString } from '@/utils/dateRange'
 
 const goal: WaterGoal = { goalMl: 3000, preferredUnit: 'l' }
 
 function Harness() {
-  const { waterLogs } = useHabitStore()
+  const { waterLogs } = useNutritionStore()
   return <WaterCard logs={waterLogs} goal={goal} />
 }
 
 beforeEach(() => {
-  resetHabitStoreForTests()
+  resetNutritionStoreForTests()
 })
 
 describe('WaterCard', () => {
@@ -35,9 +35,9 @@ describe('WaterCard', () => {
     expect(screen.getByText('2.1')).toBeInTheDocument()
   })
 
-  it('updates the displayed amount when +250 ml is tapped, via the shared habitStore', async () => {
+  it('updates the displayed amount when +250 ml is tapped, via the shared nutritionStore', async () => {
     const user = userEvent.setup()
-    const before = getDailyWaterMl(getHabitState().waterLogs, getTodayDateString())
+    const before = getDailyWaterMl(getNutritionState().waterLogs, getTodayDateString())
     render(<Harness />)
 
     await user.click(screen.getByRole('button', { name: 'Add 250 milliliters of water' }))
@@ -47,7 +47,7 @@ describe('WaterCard', () => {
 
   it('accumulates multiple quick-add taps', async () => {
     const user = userEvent.setup()
-    const before = getDailyWaterMl(getHabitState().waterLogs, getTodayDateString())
+    const before = getDailyWaterMl(getNutritionState().waterLogs, getTodayDateString())
     render(<Harness />)
 
     await user.click(screen.getByRole('button', { name: 'Add 500 milliliters of water' }))

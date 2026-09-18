@@ -14,10 +14,18 @@ import { NutritionHistoryChart } from '@/components/nutrition/NutritionHistoryCh
 import { NutritionInsights } from '@/components/nutrition/NutritionInsights'
 import { NutritionSummaryCards } from '@/components/nutrition/NutritionSummaryCards'
 import { TodaysWeightCard } from '@/components/nutrition/TodaysWeightCard'
-import { WaterGoalModal } from '@/components/habits/WaterGoalModal'
-import { WaterTracker } from '@/components/habits/WaterTracker'
-import { addFoodEntry, deleteFoodEntry, editFoodEntry, setNutritionGoals, useNutritionStore } from '@/lib/nutritionStore'
-import { addWaterLog, removeLatestWaterLog, setWaterGoal, useHabitStore } from '@/lib/habitStore'
+import { WaterGoalModal } from '@/components/nutrition/WaterGoalModal'
+import { WaterTracker } from '@/components/nutrition/WaterTracker'
+import {
+  addFoodEntry,
+  addWaterLog,
+  deleteFoodEntry,
+  editFoodEntry,
+  removeLatestWaterLog,
+  setNutritionGoals,
+  setWaterGoal,
+  useNutritionStore,
+} from '@/lib/nutritionStore'
 import { useProgressStore } from '@/lib/progressStore'
 import { MEAL_TYPES } from '@/types/nutrition'
 import type { FoodEntry, MealType, NutritionTimeRange } from '@/types/nutrition'
@@ -25,9 +33,8 @@ import { getTodayDateString } from '@/utils/dateRange'
 import { getDailyNutrition, getNutritionHistory, goalToMacroTargets } from '@/utils/nutrition'
 
 export function Nutrition() {
-  const { entries, goal } = useNutritionStore()
+  const { entries, goal, waterLogs, waterGoal } = useNutritionStore()
   const { weightLogs } = useProgressStore()
-  const { waterLogs, waterGoal } = useHabitStore()
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString())
   const [isFoodModalOpen, setIsFoodModalOpen] = useState(false)

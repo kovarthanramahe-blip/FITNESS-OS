@@ -1,9 +1,10 @@
 import { Droplets, Flame, ListChecks } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
-import type { WaterGoal, WaterLog } from '@/types/habits'
+import type { WaterGoal, WaterLog } from '@/types/nutrition'
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
-import { getDailyWaterMl, getWaterGoalPercent, type TodaysHabitsSummary } from '@/utils/habits'
+import type { TodaysHabitsSummary } from '@/utils/habits'
+import { getDailyWaterMl, getWaterGoalPercent } from '@/utils/nutrition'
 
 export interface HabitInsightsProps {
   summary: TodaysHabitsSummary

@@ -7,8 +7,8 @@ import {
   localRepositories,
   localWorkoutRepository,
 } from './index'
-import { addWaterLog, completeHabit, getHabitState, resetHabitStoreForTests } from '@/lib/habitStore'
-import { addFoodEntry, getNutritionState, resetNutritionStoreForTests } from '@/lib/nutritionStore'
+import { completeHabit, getHabitState, resetHabitStoreForTests } from '@/lib/habitStore'
+import { addFoodEntry, addWaterLog, getNutritionState, resetNutritionStoreForTests } from '@/lib/nutritionStore'
 import { addWeightLog, getProgressState, resetProgressStoreForTests } from '@/lib/progressStore'
 import { getWorkoutState, resetWorkoutStoreForTests } from '@/lib/workoutStore'
 import { resetGamificationStoreForTests, syncGamification, getGamificationState } from '@/lib/gamificationStore'
@@ -57,16 +57,21 @@ describe('local repositories — read exactly what the existing stores hold', ()
     await expect(localNutritionRepository.getGoal()).resolves.toEqual(state.goal)
   })
 
+  it('nutrition repository mirrors nutritionStore water state', async () => {
+    addWaterLog(250, '2024-06-01')
+    const state = getNutritionState()
+
+    await expect(localNutritionRepository.getWaterLogs()).resolves.toEqual(state.waterLogs)
+    await expect(localNutritionRepository.getWaterGoal()).resolves.toEqual(state.waterGoal)
+  })
+
   it('habit repository mirrors habitStore', async () => {
     const habit = getHabitState().habits[0]!
     completeHabit(habit.id, '2024-06-01')
-    addWaterLog(250, '2024-06-01')
     const state = getHabitState()
 
     await expect(localHabitRepository.getHabits()).resolves.toEqual(state.habits)
     await expect(localHabitRepository.getEntries()).resolves.toEqual(state.entries)
-    await expect(localHabitRepository.getWaterLogs()).resolves.toEqual(state.waterLogs)
-    await expect(localHabitRepository.getWaterGoal()).resolves.toEqual(state.waterGoal)
   })
 
   it('gamification repository mirrors gamificationStore', async () => {

@@ -1,10 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { mapHabitEntryRow, mapHabitRow, mapWaterLogRow } from '@/lib/repositories/cloud/mappers'
-import type { WaterLog } from '@/types/habits'
-import { resetStorageScopeForTests, scopedStorageKey, setCurrentUserId } from '@/lib/storageScope'
+import { mapHabitEntryRow, mapHabitRow } from '@/lib/repositories/cloud/mappers'
+import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import {
   addHabit,
-  addWaterLog,
   completeHabit,
   deleteHabit,
   editHabit,
@@ -14,15 +12,11 @@ import {
   mergeHabitFromCloud,
   purgeLegacyServerIdHabitEntries,
   purgeLegacyServerIdHabits,
-  purgeLegacyServerIdWaterLogs,
-  removeLatestWaterLog,
   resetHabitStoreForTests,
-  setWaterGoal,
   toggleHabitActive,
   uncompleteHabit,
 } from './habitStore'
 import { getTodayDateString } from '@/utils/dateRange'
-import { getDailyWaterMl } from '@/utils/habits'
 
 const SAMPLE_HABIT = {
   name: 'Read 10 pages',
@@ -144,188 +138,15 @@ describe('habit completion', () => {
   })
 })
 
-describe('water tracking', () => {
-  it('adds a water log for a date', () => {
-    addWaterLog(250, '2024-06-01')
-    expect(getDailyWaterMl(getHabitState().waterLogs, '2024-06-01')).toBeGreaterThanOrEqual(250)
-  })
-
-  it('removes the latest water log for a date', () => {
-    resetHabitStoreForTests()
-    const before = getDailyWaterMl(getHabitState().waterLogs, '2024-06-01')
-    addWaterLog(250, '2024-06-01')
-    addWaterLog(500, '2024-06-01')
-
-    removeLatestWaterLog('2024-06-01')
-
-    expect(getDailyWaterMl(getHabitState().waterLogs, '2024-06-01')).toBe(before + 250)
-  })
-
-  it('does nothing when removing from a date with no logs', () => {
-    const countBefore = getHabitState().waterLogs.length
-    removeLatestWaterLog('2099-01-01')
-    expect(getHabitState().waterLogs).toHaveLength(countBefore)
-  })
-
-  it('updates the water goal', () => {
-    setWaterGoal({ goalMl: 3000 })
-    expect(getHabitState().waterGoal.goalMl).toBe(3000)
-  })
-
-  it('supports multiple dates independently', () => {
-    addWaterLog(300, '2024-07-01')
-    addWaterLog(400, '2024-07-02')
-
-    expect(getDailyWaterMl(getHabitState().waterLogs, '2024-07-01')).toBe(300)
-    expect(getDailyWaterMl(getHabitState().waterLogs, '2024-07-02')).toBe(400)
-  })
-})
-
-/**
- * Regression suite for the water date-isolation bug report: "changing
- * today's water changes yesterday's displayed value." The root cause turned
- * out to be in the UI layer (WaterTracker ignored Nutrition's date
- * navigation and always read/wrote real "today" — see Nutrition.test.tsx),
- * not in this store, but these 7 scenarios are the store-level contract the
- * bug report requires and the UI fix depends on: every date's water total
- * must be independently derived and never mutated by another date's writes,
- * across local persistence and cloud sync alike.
- */
-describe('water date isolation regression (bug fix)', () => {
-  const YESTERDAY = '2026-09-17'
-  const TODAY = '2026-09-18'
-
-  // A clean, un-seeded slate — the default (unauthenticated) store carries
-  // demo water logs for recent relative dates, which would otherwise add
-  // to these exact-ml assertions.
-  beforeEach(() => {
-    setCurrentUserId('user-water-regression')
-    resetHabitStoreForTests()
-  })
-
-  afterEach(() => {
-    resetStorageScopeForTests()
-    resetHabitStoreForTests()
-  })
-
-  it('1. yesterday = 3500 ml', () => {
-    addWaterLog(3500, YESTERDAY)
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
-  })
-
-  it('2. today = 4000 ml', () => {
-    addWaterLog(4000, TODAY)
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
-  })
-
-  it('3. updating today does not change yesterday', () => {
-    addWaterLog(3500, YESTERDAY)
-    addWaterLog(4000, TODAY)
-
-    addWaterLog(500, TODAY)
-
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4500)
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
-  })
-
-  it('4. updating yesterday does not change today', () => {
-    addWaterLog(3500, YESTERDAY)
-    addWaterLog(4000, TODAY)
-
-    addWaterLog(500, YESTERDAY)
-
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(4000)
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
-  })
-
-  it('5. reloading localStorage preserves both values', () => {
-    addWaterLog(3500, YESTERDAY)
-    addWaterLog(4000, TODAY)
-
-    const raw = window.localStorage.getItem(scopedStorageKey('fitness-os:habit-store:v1'))
-    const parsed = JSON.parse(raw!) as { waterLogs: WaterLog[] }
-
-    expect(getDailyWaterMl(parsed.waterLogs, YESTERDAY)).toBe(3500)
-    expect(getDailyWaterMl(parsed.waterLogs, TODAY)).toBe(4000)
-  })
-
-  it('6. cloud push/hydration preserves both values independently', () => {
-    addWaterLog(3500, YESTERDAY)
-    addWaterLog(4000, TODAY)
-    const [localYesterdayId, localTodayId] = getHabitState().waterLogs.map((log) => log.id)
-
-    // Simulate what comes back from Supabase on the next sign-in: the same
-    // two logs, round-tripped through the real mapper, keyed by their
-    // stable client ids (never the server row id — see mapWaterLogRow's
-    // doc comment for why that distinction is the whole fix for the
-    // earlier cloud-duplication bug).
-    const cloudYesterday = mapWaterLogRow({
-      id: 'server-uuid-yesterday',
-      user_id: 'user-water-regression',
-      client_log_id: localYesterdayId!,
-      log_date: YESTERDAY,
-      amount_ml: 3500,
-      created_at: `${YESTERDAY}T08:00:00.000Z`,
-    })
-    const cloudToday = mapWaterLogRow({
-      id: 'server-uuid-today',
-      user_id: 'user-water-regression',
-      client_log_id: localTodayId!,
-      log_date: TODAY,
-      amount_ml: 4000,
-      created_at: `${TODAY}T08:00:00.000Z`,
-    })
-
-    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
-
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
-  })
-
-  it('7. no duplicate water records are created during hydration', () => {
-    addWaterLog(3500, YESTERDAY)
-    addWaterLog(4000, TODAY)
-    const [localYesterdayId, localTodayId] = getHabitState().waterLogs.map((log) => log.id)
-
-    const cloudYesterday = mapWaterLogRow({
-      id: 'server-uuid-yesterday',
-      user_id: 'user-water-regression',
-      client_log_id: localYesterdayId!,
-      log_date: YESTERDAY,
-      amount_ml: 3500,
-      created_at: `${YESTERDAY}T08:00:00.000Z`,
-    })
-    const cloudToday = mapWaterLogRow({
-      id: 'server-uuid-today',
-      user_id: 'user-water-regression',
-      client_log_id: localTodayId!,
-      log_date: TODAY,
-      amount_ml: 4000,
-      created_at: `${TODAY}T08:00:00.000Z`,
-    })
-
-    // Sign in repeatedly (app close/reopen) — hydrating the same two
-    // already-synced logs must never grow the array.
-    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
-    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
-    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
-
-    expect(getHabitState().waterLogs).toHaveLength(2)
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
-  })
-})
-
 describe('persistence', () => {
-  it('persists habits, entries, and water state to localStorage', () => {
+  it('persists habits and entries to localStorage', () => {
     addHabit(SAMPLE_HABIT)
-    addWaterLog(250, '2024-06-01')
+    completeHabit(getHabitState().habits.at(-1)!.id, '2024-06-01')
 
     const raw = window.localStorage.getItem('fitness-os:habit-store:v1')
     expect(raw).toBeTruthy()
     const parsed = JSON.parse(raw!)
     expect(parsed.habits.some((h: { name: string }) => h.name === 'Read 10 pages')).toBe(true)
-    expect(parsed.waterLogs.some((w: { amountMl: number }) => w.amountMl === 250)).toBe(true)
   })
 })
 
@@ -335,14 +156,13 @@ describe('authenticated zero-state', () => {
     resetHabitStoreForTests()
   })
 
-  it('starts a new authenticated user with no habits, entries, or water logs', () => {
+  it('starts a new authenticated user with no habits or entries', () => {
     setCurrentUserId('user-1')
     resetHabitStoreForTests()
 
     const state = getHabitState()
     expect(state.habits).toEqual([])
     expect(state.entries).toEqual([])
-    expect(state.waterLogs).toEqual([])
   })
 
   it('keeps guest/demo mode seeded with mock data', () => {
@@ -381,7 +201,7 @@ describe('mergeHabitFromCloud', () => {
     const localOnlyId = getHabitState().habits[0]!.id
     const cloudHabit = { ...SAMPLE_HABIT, id: 'cloud-habit-1', createdAt: '2024-06-01T00:00:00.000Z' }
 
-    const { localOnlyHabits } = mergeHabitFromCloud({ habits: [cloudHabit], entries: [], waterLogs: [], waterGoal: null })
+    const { localOnlyHabits } = mergeHabitFromCloud({ habits: [cloudHabit], entries: [] })
 
     expect(localOnlyHabits.map((h) => h.id)).toEqual([localOnlyId])
     expect(getHabitState().habits.map((h) => h.id).sort()).toEqual([localOnlyId, 'cloud-habit-1'].sort())
@@ -392,7 +212,7 @@ describe('mergeHabitFromCloud', () => {
     const sharedId = getHabitState().habits[0]!.id
     const cloudVersion = { ...SAMPLE_HABIT, id: sharedId, name: 'Renamed elsewhere', createdAt: '2024-06-01T00:00:00.000Z' }
 
-    mergeHabitFromCloud({ habits: [cloudVersion], entries: [], waterLogs: [], waterGoal: null })
+    mergeHabitFromCloud({ habits: [cloudVersion], entries: [] })
 
     expect(getHabitState().habits).toHaveLength(1)
     expect(getHabitState().habits[0]?.name).toBe('Renamed elsewhere')
@@ -404,48 +224,26 @@ describe('mergeHabitFromCloud', () => {
     completeHabit(habit.id, '2024-06-01')
     const localEntry = getHabitState().entries[0]!
 
-    const { localOnlyEntries } = mergeHabitFromCloud({
-      habits: [habit],
-      entries: [],
-      waterLogs: [],
-      waterGoal: null,
-    })
+    const { localOnlyEntries } = mergeHabitFromCloud({ habits: [habit], entries: [] })
 
     expect(localOnlyEntries).toEqual([{ entry: localEntry, habit }])
   })
 
-  it('cloud wins on a shared water log id', () => {
-    addWaterLog(250, '2024-06-01')
-    const sharedId = getHabitState().waterLogs[0]!.id
-    const cloudLog = { id: sharedId, date: '2024-06-01', amountMl: 500, createdAt: '2024-06-01T00:00:00.000Z' }
-
-    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudLog], waterGoal: null })
-
-    expect(getHabitState().waterLogs).toEqual([cloudLog])
-  })
-
-  it('a null cloud water goal keeps the local one and reports it for push-back', () => {
-    const { waterGoalToPush } = mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [], waterGoal: null })
-    expect(waterGoalToPush).toEqual(getHabitState().waterGoal)
-  })
-
-  // Regression for the double-counting bug: a habit, its completion entry,
-  // and a water log already pushed to the cloud come back through the real
-  // mappers keyed by their `client_*_id` columns (the local ids), never the
-  // server row id — feeding the mappers' actual output in here is what
-  // makes this test fail against the old `id: row.id` mappers (duplicates
-  // on the very next hydration/app-reopen) and pass against the fix. The
-  // habit entry case additionally proves `habitId` resolves back to the
-  // *client* habit id (via the server-id map `getEntries` builds), not the
-  // server-side foreign key `habit_id` — otherwise the entry would survive
-  // the merge but silently detach from its habit.
-  it('hydrating the same already-synced habit, entry, and water log repeatedly (closing/reopening the app) never duplicates them', () => {
+  // Regression for the double-counting bug: a habit and its completion
+  // entry already pushed to the cloud come back through the real mappers
+  // keyed by their `client_*_id` columns (the local ids), never the server
+  // row id — feeding the mappers' actual output in here is what makes this
+  // test fail against the old `id: row.id` mappers (duplicates on the very
+  // next hydration/app-reopen) and pass against the fix. It additionally
+  // proves `habitId` resolves back to the *client* habit id (via the
+  // server-id map `getEntries` builds), not the server-side foreign key
+  // `habit_id` — otherwise the entry would survive the merge but silently
+  // detach from its habit.
+  it('hydrating the same already-synced habit and entry repeatedly (closing/reopening the app) never duplicates them', () => {
     addHabit(SAMPLE_HABIT)
     const localHabitId = getHabitState().habits[0]!.id
     completeHabit(localHabitId, '2024-06-01')
     const localEntryId = getHabitState().entries[0]!.id
-    addWaterLog(250, '2024-06-01')
-    const localWaterLogId = getHabitState().waterLogs[0]!.id
 
     const cloudHabit = mapHabitRow({
       id: 'server-generated-habit-uuid',
@@ -477,35 +275,24 @@ describe('mergeHabitFromCloud', () => {
       },
       new Map([['server-generated-habit-uuid', localHabitId]]),
     )
-    const cloudWaterLog = mapWaterLogRow({
-      id: 'server-generated-water-uuid',
-      user_id: 'user-merge-test',
-      client_log_id: localWaterLogId,
-      log_date: '2024-06-01',
-      amount_ml: 250,
-      created_at: '2024-06-01T00:00:00.000Z',
-    })
 
-    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry], waterLogs: [cloudWaterLog], waterGoal: null })
+    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry] })
     expect(getHabitState().habits).toHaveLength(1)
     expect(getHabitState().entries).toHaveLength(1)
-    expect(getHabitState().waterLogs).toHaveLength(1)
     expect(getHabitState().entries[0]!.habitId).toBe(localHabitId)
 
     // Close the app and reopen it (repeatedly) — counts must never grow.
-    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry], waterLogs: [cloudWaterLog], waterGoal: null })
-    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry], waterLogs: [cloudWaterLog], waterGoal: null })
+    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry] })
+    mergeHabitFromCloud({ habits: [cloudHabit], entries: [cloudEntry] })
 
     expect(getHabitState().habits).toHaveLength(1)
     expect(getHabitState().habits[0]!.id).toBe(localHabitId)
     expect(getHabitState().entries).toHaveLength(1)
     expect(getHabitState().entries[0]!.id).toBe(localEntryId)
-    expect(getHabitState().waterLogs).toHaveLength(1)
-    expect(getHabitState().waterLogs[0]!.id).toBe(localWaterLogId)
   })
 })
 
-describe('purgeLegacyServerId(Habits|HabitEntries|WaterLogs) (one-time local-duplicate cleanup)', () => {
+describe('purgeLegacyServerId(Habits|HabitEntries) (one-time local-duplicate cleanup)', () => {
   beforeEach(() => {
     setCurrentUserId('user-purge-test')
     resetHabitStoreForTests()
@@ -519,35 +306,22 @@ describe('purgeLegacyServerId(Habits|HabitEntries|WaterLogs) (one-time local-dup
   it('does nothing for a fresh store with no records at all', () => {
     expect(purgeLegacyServerIdHabits(['server-uuid'])).toEqual([])
     expect(purgeLegacyServerIdHabitEntries(['server-uuid'], {})).toEqual([])
-    expect(purgeLegacyServerIdWaterLogs(['server-uuid'])).toEqual([])
     expect(getHabitState().habits).toEqual([])
     expect(getHabitState().entries).toEqual([])
-    expect(getHabitState().waterLogs).toEqual([])
   })
 
   // TEST B
-  it('removes a legacy server-id-keyed habit and water log while keeping the canonical client-id copies', () => {
+  it('removes a legacy server-id-keyed habit while keeping the canonical client-id copy', () => {
     addHabit(SAMPLE_HABIT)
     const canonicalHabit = getHabitState().habits[0]!
-    addWaterLog(250, '2024-06-01')
-    const canonicalWaterLog = getHabitState().waterLogs[0]!
 
-    mergeHabitFromCloud({
-      habits: [{ ...canonicalHabit, id: 'server-habit-uuid' }],
-      entries: [],
-      waterLogs: [{ ...canonicalWaterLog, id: 'server-water-uuid' }],
-      waterGoal: null,
-    })
+    mergeHabitFromCloud({ habits: [{ ...canonicalHabit, id: 'server-habit-uuid' }], entries: [] })
     expect(getHabitState().habits).toHaveLength(2)
-    expect(getHabitState().waterLogs).toHaveLength(2)
 
     const removedHabits = purgeLegacyServerIdHabits(['server-habit-uuid'])
-    const removedWaterLogs = purgeLegacyServerIdWaterLogs(['server-water-uuid'])
 
     expect(removedHabits).toEqual([{ ...canonicalHabit, id: 'server-habit-uuid' }])
-    expect(removedWaterLogs).toEqual([{ ...canonicalWaterLog, id: 'server-water-uuid' }])
     expect(getHabitState().habits).toEqual([canonicalHabit])
-    expect(getHabitState().waterLogs).toEqual([canonicalWaterLog])
   })
 
   it('removes a legacy server-id-keyed habit entry and re-points a surviving entry whose habitId is still a legacy server habit id', () => {
@@ -567,12 +341,7 @@ describe('purgeLegacyServerId(Habits|HabitEntries|WaterLogs) (one-time local-dup
       date: '2024-06-02',
       completedAt: '2024-06-02T00:00:00.000Z',
     }
-    mergeHabitFromCloud({
-      habits: [],
-      entries: [legacyDuplicateEntry, survivingEntryWithStaleHabitId],
-      waterLogs: [],
-      waterGoal: null,
-    })
+    mergeHabitFromCloud({ habits: [], entries: [legacyDuplicateEntry, survivingEntryWithStaleHabitId] })
     expect(getHabitState().entries).toHaveLength(3)
 
     const removed = purgeLegacyServerIdHabitEntries(['server-entry-uuid'], { 'server-habit-uuid': canonicalHabit.id })
@@ -594,7 +363,7 @@ describe('purgeLegacyServerId(Habits|HabitEntries|WaterLogs) (one-time local-dup
     const canonicalHabit = getHabitState().habits[0]!
     completeHabit(canonicalHabit.id, '2024-06-01')
     const staleEntry = { id: 'entry-client-2', habitId: 'server-habit-uuid', date: '2024-06-02', completedAt: '2024-06-02T00:00:00.000Z' }
-    mergeHabitFromCloud({ habits: [], entries: [staleEntry], waterLogs: [], waterGoal: null })
+    mergeHabitFromCloud({ habits: [], entries: [staleEntry] })
 
     const habitIdMap = { 'server-habit-uuid': canonicalHabit.id }
     purgeLegacyServerIdHabitEntries([], habitIdMap)
@@ -608,36 +377,28 @@ describe('purgeLegacyServerId(Habits|HabitEntries|WaterLogs) (one-time local-dup
   })
 
   // TEST D
-  it('never removes two legitimate habits, entries, or water logs that merely look alike', () => {
+  it('never removes two legitimate habits that merely look alike', () => {
     const habitA = { ...SAMPLE_HABIT, id: 'habit-client-a', createdAt: '2024-06-01T00:00:00.000Z' }
     const habitB = { ...SAMPLE_HABIT, id: 'habit-client-b', createdAt: '2024-06-01T00:00:00.000Z' }
-    const waterLogA = { id: 'water-client-a', date: '2024-06-01', amountMl: 250, createdAt: '2024-06-01T00:00:00.000Z' }
-    const waterLogB = { id: 'water-client-b', date: '2024-06-01', amountMl: 250, createdAt: '2024-06-01T00:00:00.000Z' }
-    mergeHabitFromCloud({ habits: [habitA, habitB], entries: [], waterLogs: [waterLogA, waterLogB], waterGoal: null })
+    mergeHabitFromCloud({ habits: [habitA, habitB], entries: [] })
 
     expect(purgeLegacyServerIdHabits(['unrelated-server-uuid'])).toEqual([])
-    expect(purgeLegacyServerIdWaterLogs(['unrelated-server-uuid'])).toEqual([])
     expect(getHabitState().habits.map((h) => h.id).sort()).toEqual(['habit-client-a', 'habit-client-b'])
-    expect(getHabitState().waterLogs.map((l) => l.id).sort()).toEqual(['water-client-a', 'water-client-b'])
   })
 
   // TEST E
-  it('never removes local-only habits, entries, or water logs whose ids were never seen on the server', () => {
+  it('never removes local-only habits or entries whose ids were never seen on the server', () => {
     addHabit(SAMPLE_HABIT)
     const habit = getHabitState().habits[0]!
     completeHabit(habit.id, '2024-06-01')
-    addWaterLog(250, '2024-06-01')
     const habitsBefore = getHabitState().habits
     const entriesBefore = getHabitState().entries
-    const waterLogsBefore = getHabitState().waterLogs
 
     purgeLegacyServerIdHabits(['unrelated-server-uuid'])
     purgeLegacyServerIdHabitEntries(['unrelated-server-uuid'], {})
-    purgeLegacyServerIdWaterLogs(['unrelated-server-uuid'])
 
     expect(getHabitState().habits).toBe(habitsBefore)
     expect(getHabitState().entries).toBe(entriesBefore)
-    expect(getHabitState().waterLogs).toBe(waterLogsBefore)
   })
 })
 
@@ -646,30 +407,26 @@ describe('local persistence survives closing and reopening the app without dupli
     resetStorageScopeForTests()
   })
 
-  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows habits, entries, or water logs', async () => {
+  it('re-importing the store module against the same localStorage content (simulating an app restart) never grows habits or entries', async () => {
     vi.resetModules()
     const first = await import('./habitStore')
     first.resetHabitStoreForTests()
     first.addHabit(SAMPLE_HABIT)
     const habitId = first.getHabitState().habits[0]!.id
     first.completeHabit(habitId, '2024-06-01')
-    first.addWaterLog(250, '2024-06-01')
     const afterFirstOpen = {
       habits: first.getHabitState().habits.length,
       entries: first.getHabitState().entries.length,
-      waterLogs: first.getHabitState().waterLogs.length,
     }
 
     vi.resetModules()
     const second = await import('./habitStore')
     expect(second.getHabitState().habits).toHaveLength(afterFirstOpen.habits)
     expect(second.getHabitState().entries).toHaveLength(afterFirstOpen.entries)
-    expect(second.getHabitState().waterLogs).toHaveLength(afterFirstOpen.waterLogs)
 
     vi.resetModules()
     const third = await import('./habitStore')
     expect(third.getHabitState().habits).toHaveLength(afterFirstOpen.habits)
     expect(third.getHabitState().entries).toHaveLength(afterFirstOpen.entries)
-    expect(third.getHabitState().waterLogs).toHaveLength(afterFirstOpen.waterLogs)
   })
 })

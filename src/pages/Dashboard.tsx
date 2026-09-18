@@ -28,8 +28,8 @@ import { useWorkoutStore } from '@/lib/workoutStore'
 import type { NutrientSummary } from '@/types/dashboard'
 import { getTodayDateString } from '@/utils/dateRange'
 import { getNextAction, getWeeklyActivityFromHistory } from '@/utils/dashboard'
-import { getDailyWaterMl, getHabitStatusForDate } from '@/utils/habits'
-import { getDailyTotals, goalToMacroTargets } from '@/utils/nutrition'
+import { getHabitStatusForDate } from '@/utils/habits'
+import { getDailyTotals, getDailyWaterMl, goalToMacroTargets } from '@/utils/nutrition'
 import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
 
@@ -77,13 +77,13 @@ export function Dashboard() {
   // Carbs/fat are derived alongside calories/protein for consistency, even
   // though only calories and protein have a dedicated card on this page —
   // the Nutrition page is where the full macro breakdown lives.
-  const { entries: foodEntries, goal: nutritionGoal } = useNutritionStore()
+  const { entries: foodEntries, goal: nutritionGoal, waterLogs, waterGoal } = useNutritionStore()
   const dailyTotals = getDailyTotals(foodEntries, getTodayDateString())
   const macroTargets = goalToMacroTargets(nutritionGoal)
   const calories: NutrientSummary = { label: 'Calories', unit: 'kcal', consumed: dailyTotals.calories, target: macroTargets.calories }
   const protein: NutrientSummary = { label: 'Protein', unit: 'g', consumed: dailyTotals.protein, target: macroTargets.protein }
 
-  const { habits, entries: habitEntries, waterLogs, waterGoal } = useHabitStore()
+  const { habits, entries: habitEntries } = useHabitStore()
 
   const today = getTodayDateString()
   const nextIncompleteHabit = habits.find(

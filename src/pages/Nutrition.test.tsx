@@ -2,12 +2,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { Nutrition } from './Nutrition'
-import { addWaterLog, getHabitState, resetHabitStoreForTests } from '@/lib/habitStore'
-import { resetNutritionStoreForTests } from '@/lib/nutritionStore'
+import { resetHabitStoreForTests } from '@/lib/habitStore'
+import { addWaterLog, getNutritionState, resetNutritionStoreForTests } from '@/lib/nutritionStore'
 import { resetProgressStoreForTests } from '@/lib/progressStore'
 import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
-import { getDailyWaterMl } from '@/utils/habits'
+import { getDailyWaterMl } from '@/utils/nutrition'
 
 const TODAY = getTodayDateString()
 const YESTERDAY = addDaysToDateString(TODAY, -1)
@@ -61,8 +61,8 @@ describe('Nutrition page — water respects the selected date', () => {
     await user.click(screen.getByRole('button', { name: 'Previous day' }))
     await user.click(screen.getByRole('button', { name: '250 ml' }))
 
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3750)
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3750)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4000)
   })
 
   it('adding water while viewing today never changes yesterday', async () => {
@@ -73,7 +73,7 @@ describe('Nutrition page — water respects the selected date', () => {
 
     await user.click(screen.getByRole('button', { name: '250 ml' }))
 
-    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4250)
-    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, TODAY)).toBe(4250)
+    expect(getDailyWaterMl(getNutritionState().waterLogs, YESTERDAY)).toBe(3500)
   })
 })

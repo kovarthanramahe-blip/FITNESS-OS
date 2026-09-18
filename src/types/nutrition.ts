@@ -88,3 +88,26 @@ export interface MacroTargets {
   fat: number
   fiber?: number
 }
+
+// ---------------------------------------------------------------------------
+// Water tracking — a Nutrition metric like calories/protein/carbs/fat: an
+// append-only log of dated entries, never a single mutable "today" value.
+// ---------------------------------------------------------------------------
+
+export interface WaterLog {
+  id: string
+  /** ISO date string (yyyy-mm-dd) the log is for — never derived from another date. */
+  date: string
+  amountMl: number
+  /** ISO timestamp. */
+  createdAt: string
+}
+
+export type WaterUnit = 'ml' | 'l'
+
+export interface WaterGoal {
+  /** Canonical storage unit — always millilitres, regardless of display preference. */
+  goalMl: number
+  /** The user's preferred display unit; the goal itself is still stored in ml. */
+  preferredUnit: WaterUnit
+}

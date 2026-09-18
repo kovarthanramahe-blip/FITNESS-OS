@@ -32,8 +32,8 @@ export function useProgressCalendar(now: Date = new Date()): UseProgressCalendar
 
   const { weightLogs } = useProgressStore()
   const { history } = useWorkoutStore()
-  const { entries: foodEntries } = useNutritionStore()
-  const { habits, entries: habitEntries, waterLogs } = useHabitStore()
+  const { entries: foodEntries, waterLogs } = useNutritionStore()
+  const { habits, entries: habitEntries } = useHabitStore()
 
   const grid = useMemo(() => getCalendarMonthGrid(cursor.year, cursor.month), [cursor.year, cursor.month])
 

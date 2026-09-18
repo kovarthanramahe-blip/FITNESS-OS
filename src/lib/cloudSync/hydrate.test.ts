@@ -16,15 +16,15 @@ const emptyNutritionRepo = {
   getFoodEntries: vi.fn().mockResolvedValue([]),
   getGoal: vi.fn().mockResolvedValue(null),
   getFoodEntryServerIds: vi.fn().mockResolvedValue([]),
+  getWaterLogs: vi.fn().mockResolvedValue([]),
+  getWaterGoal: vi.fn().mockResolvedValue(null),
+  getWaterLogServerIds: vi.fn().mockResolvedValue([]),
 }
 const emptyHabitRepo = {
   getHabits: vi.fn().mockResolvedValue([]),
   getEntries: vi.fn().mockResolvedValue([]),
-  getWaterLogs: vi.fn().mockResolvedValue([]),
-  getWaterGoal: vi.fn().mockResolvedValue(null),
   getHabitServerIdToClientId: vi.fn().mockResolvedValue({}),
   getHabitEntryServerIds: vi.fn().mockResolvedValue([]),
-  getWaterLogServerIds: vi.fn().mockResolvedValue([]),
 }
 const emptyGamificationRepo = {
   getXpEvents: vi.fn().mockResolvedValue([]),
@@ -53,12 +53,15 @@ function mockRepos(overrides: RepoOverrides = {}) {
 function mockStores() {
   const mergeWorkoutFromCloud = vi.fn(() => ({ localOnlyPersonalRecords: [] }))
   const mergeProgressFromCloud = vi.fn(() => ({ localOnlyWeightLogs: [], localOnlyMeasurements: [], weightGoalToPush: null }))
-  const mergeNutritionFromCloud = vi.fn(() => ({ localOnlyEntries: [], goalToPush: null }))
+  const mergeNutritionFromCloud = vi.fn(() => ({
+    localOnlyEntries: [],
+    goalToPush: null,
+    localOnlyWaterLogs: [],
+    waterGoalToPush: null,
+  }))
   const mergeHabitFromCloud = vi.fn(() => ({
     localOnlyHabits: [],
     localOnlyEntries: [],
-    localOnlyWaterLogs: [],
-    waterGoalToPush: null,
   }))
   const mergeGamificationFromCloud = vi.fn(() => ({
     localOnlyXpEvents: [],
@@ -81,12 +84,15 @@ function mockStores() {
     purgeLegacyServerIdWeightLogs,
     purgeLegacyServerIdMeasurements,
   }))
-  vi.doMock('@/lib/nutritionStore', () => ({ mergeNutritionFromCloud, purgeLegacyServerIdFoodEntries }))
+  vi.doMock('@/lib/nutritionStore', () => ({
+    mergeNutritionFromCloud,
+    purgeLegacyServerIdFoodEntries,
+    purgeLegacyServerIdWaterLogs,
+  }))
   vi.doMock('@/lib/habitStore', () => ({
     mergeHabitFromCloud,
     purgeLegacyServerIdHabits,
     purgeLegacyServerIdHabitEntries,
-    purgeLegacyServerIdWaterLogs,
   }))
   vi.doMock('@/lib/gamificationStore', () => ({
     mergeGamificationFromCloud,

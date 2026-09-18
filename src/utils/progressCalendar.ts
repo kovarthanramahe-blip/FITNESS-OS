@@ -1,10 +1,10 @@
-import type { Habit, HabitEntry, WaterLog } from '@/types/habits'
-import type { FoodEntry } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { FoodEntry, WaterLog } from '@/types/nutrition'
 import type { WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry } from '@/types/workout'
 import { toDateString } from '@/utils/dateRange'
-import { getDailyWaterMl, isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
-import { getDailyTotals } from '@/utils/nutrition'
+import { isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
+import { getDailyTotals, getDailyWaterMl } from '@/utils/nutrition'
 
 /**
  * Everything the Progress Calendar derives its day indicators from — all of

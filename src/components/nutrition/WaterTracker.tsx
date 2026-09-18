@@ -4,8 +4,8 @@ import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { ProgressBar } from '@/components/ui/ProgressBar'
-import type { WaterGoal, WaterLog } from '@/types/habits'
-import { getDailyWaterMl, getRemainingWaterMl, getWaterGoalPercent, litersToMl, mlToLiters } from '@/utils/habits'
+import type { WaterGoal, WaterLog } from '@/types/nutrition'
+import { getDailyWaterMl, getRemainingWaterMl, getWaterGoalPercent, litersToMl, mlToLiters } from '@/utils/nutrition'
 import { getTodayDateString } from '@/utils/dateRange'
 
 export interface WaterTrackerProps {

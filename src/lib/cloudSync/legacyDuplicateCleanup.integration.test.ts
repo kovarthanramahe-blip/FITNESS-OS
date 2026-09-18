@@ -251,6 +251,18 @@ function mockCloudBoundary() {
       ],
       getGoal: async () => null,
       getFoodEntryServerIds: async () => ['server-food-uuid-1'],
+      getWaterLogs: async () => [
+        mapWaterLogRow({
+          id: 'server-water-uuid-1',
+          user_id: USER_ID,
+          client_log_id: 'water-client-1',
+          log_date: '2024-06-01',
+          amount_ml: 250,
+          created_at: '2024-06-01T07:00:00.000Z',
+        }),
+      ],
+      getWaterGoal: async () => null,
+      getWaterLogServerIds: async () => ['server-water-uuid-1'],
     }),
     createCloudHabitRepository: () => ({
       getHabits: async () => [
@@ -283,20 +295,8 @@ function mockCloudBoundary() {
             new Map([['server-habit-uuid-1', 'habit-client-1']]),
           ),
         ],
-      getWaterLogs: async () => [
-        mapWaterLogRow({
-          id: 'server-water-uuid-1',
-          user_id: USER_ID,
-          client_log_id: 'water-client-1',
-          log_date: '2024-06-01',
-          amount_ml: 250,
-          created_at: '2024-06-01T07:00:00.000Z',
-        }),
-      ],
-      getWaterGoal: async () => null,
       getHabitServerIdToClientId: async () => ({ 'server-habit-uuid-1': 'habit-client-1' }),
       getHabitEntryServerIds: async () => ['server-entry-uuid-1'],
-      getWaterLogServerIds: async () => ['server-water-uuid-1'],
     }),
     createCloudGamificationRepository: () => ({
       getXpEvents: async () => [],
@@ -369,7 +369,8 @@ describe('legacy local-duplicate migration — full pipeline against a realistic
     // C: the surviving entry with a stale habitId is re-pointed to the canonical habit id.
     expect(habitEntries.find((e) => e.id === 'entry-client-2')).toMatchObject({ habitId: 'habit-client-1' })
 
-    const waterLogs = getHabitState().waterLogs
+    // --- water (now a Nutrition metric, migrated from the legacy habit-store blob) ---
+    const waterLogs = getNutritionState().waterLogs
     expect(waterLogs.map((w) => w.id)).toEqual(['water-client-1'])
   })
 
@@ -395,7 +396,7 @@ describe('legacy local-duplicate migration — full pipeline against a realistic
       entries: getNutritionState().entries.length,
       habits: getHabitState().habits.length,
       habitEntries: getHabitState().entries.length,
-      waterLogs: getHabitState().waterLogs.length,
+      waterLogs: getNutritionState().waterLogs.length,
     }
 
     // "Close the app and reopen it": re-run hydration against the now-cleaned
@@ -411,7 +412,7 @@ describe('legacy local-duplicate migration — full pipeline against a realistic
     expect(getNutritionState().entries).toHaveLength(afterFirst.entries)
     expect(getHabitState().habits).toHaveLength(afterFirst.habits)
     expect(getHabitState().entries).toHaveLength(afterFirst.habitEntries)
-    expect(getHabitState().waterLogs).toHaveLength(afterFirst.waterLogs)
+    expect(getNutritionState().waterLogs).toHaveLength(afterFirst.waterLogs)
   })
 
   // Point 12: offline / cloud fetch failure must never destructively touch local data.
@@ -454,15 +455,19 @@ describe('legacy local-duplicate migration — full pipeline against a realistic
         getWeightLogServerIds: async () => [],
         getMeasurementServerIds: async () => [],
       }),
-      createCloudNutritionRepository: () => ({ getFoodEntries: async () => [], getGoal: async () => null, getFoodEntryServerIds: async () => [] }),
+      createCloudNutritionRepository: () => ({
+        getFoodEntries: async () => [],
+        getGoal: async () => null,
+        getFoodEntryServerIds: async () => [],
+        getWaterLogs: async () => [],
+        getWaterGoal: async () => null,
+        getWaterLogServerIds: async () => [],
+      }),
       createCloudHabitRepository: () => ({
         getHabits: async () => [],
         getEntries: async () => [],
-        getWaterLogs: async () => [],
-        getWaterGoal: async () => null,
         getHabitServerIdToClientId: async () => ({}),
         getHabitEntryServerIds: async () => [],
-        getWaterLogServerIds: async () => [],
       }),
       createCloudGamificationRepository: () => ({ getXpEvents: async () => [], getEarnedBadges: async () => [], getCompletedChallengeIds: async () => [] }),
     }))

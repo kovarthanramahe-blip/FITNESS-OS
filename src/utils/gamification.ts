@@ -5,13 +5,13 @@ import { getNutritionState } from '@/lib/nutritionStore'
 import { getProgressState } from '@/lib/progressStore'
 import { getWorkoutState } from '@/lib/workoutStore'
 import type { BodyMeasurement, PersonalRecord, WeightLog } from '@/types/progress'
-import type { FoodEntry } from '@/types/nutrition'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
+import type { FoodEntry, WaterGoal, WaterLog } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
 import type { ProgramDay, WorkoutHistoryEntry } from '@/types/workout'
 import type { XPEvent, XPEventType } from '@/types/gamification'
 import { clamp } from '@/utils/format'
-import { getEntriesForDate } from '@/utils/nutrition'
-import { getDailyWaterMl, isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
+import { getDailyWaterMl, getEntriesForDate } from '@/utils/nutrition'
+import { isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
 import { resolveProgramDay } from '@/utils/workout'
 
 // ---------------------------------------------------------------------------
@@ -53,8 +53,8 @@ export function getActivitySnapshot(now: Date = new Date()): ActivitySnapshot {
     foodEntries: nutrition.entries,
     habits: habit.habits,
     habitEntries: habit.entries,
-    waterLogs: habit.waterLogs,
-    waterGoal: habit.waterGoal,
+    waterLogs: nutrition.waterLogs,
+    waterGoal: nutrition.waterGoal,
     weightLogs: progress.weightLogs,
     measurements: progress.measurements,
     todayProgramDayType: resolveTodayProgramDayType(workout.selectedProgramId, workout.currentDayIndex),

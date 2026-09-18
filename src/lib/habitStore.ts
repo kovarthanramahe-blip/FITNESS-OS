@@ -1,27 +1,16 @@
 import { useSyncExternalStore } from 'react'
-import { mockHabitEntries, mockHabits, mockWaterGoal, mockWaterLogs } from '@/data/mockHabits'
-import {
-  pushHabit,
-  pushHabitDelete,
-  pushHabitEntry,
-  pushHabitEntryDelete,
-  pushWaterGoal,
-  pushWaterLog,
-  pushWaterLogDelete,
-} from '@/lib/cloudSync/push'
+import { mockHabitEntries, mockHabits } from '@/data/mockHabits'
+import { pushHabit, pushHabitDelete, pushHabitEntry, pushHabitEntryDelete } from '@/lib/cloudSync/push'
 import { persistLocalState } from '@/lib/localStorageHealth'
 import { getCurrentUserId, onUserScopeChange, scopedStorageKey } from '@/lib/storageScope'
-import type { Habit, HabitEntry, HabitIconKey, HabitSchedule, WaterGoal, WaterLog } from '@/types/habits'
+import type { Habit, HabitEntry, HabitIconKey, HabitSchedule } from '@/types/habits'
 import { getTodayDateString } from '@/utils/dateRange'
-import { getLatestWaterLogForDate } from '@/utils/habits'
 
 const BASE_STORAGE_KEY = 'fitness-os:habit-store:v1'
 
 export interface HabitStoreState {
   habits: Habit[]
   entries: HabitEntry[]
-  waterLogs: WaterLog[]
-  waterGoal: WaterGoal
 }
 
 function createInitialState(): HabitStoreState {
@@ -29,15 +18,11 @@ function createInitialState(): HabitStoreState {
     return {
       habits: [],
       entries: [],
-      waterLogs: [],
-      waterGoal: mockWaterGoal,
     }
   }
   return {
     habits: mockHabits,
     entries: mockHabitEntries,
-    waterLogs: mockWaterLogs,
-    waterGoal: mockWaterGoal,
   }
 }
 
@@ -52,8 +37,6 @@ function loadPersistedState(): HabitStoreState {
     return {
       habits: parsed.habits ?? initial.habits,
       entries: parsed.entries ?? initial.entries,
-      waterLogs: parsed.waterLogs ?? initial.waterLogs,
-      waterGoal: parsed.waterGoal ?? initial.waterGoal,
     }
   } catch {
     return initial
@@ -188,51 +171,22 @@ export function getHabitHistory(habitId: string): HabitEntry[] {
   return state.entries.filter((entry) => entry.habitId === habitId)
 }
 
-// ---------------------------------------------------------------------------
-// Water actions
-// ---------------------------------------------------------------------------
-
-export function addWaterLog(amountMl: number, date: string = getTodayDateString()): void {
-  const newLog: WaterLog = { id: nextId('water'), date, amountMl, createdAt: new Date().toISOString() }
-  setState((current) => ({ ...current, waterLogs: [...current.waterLogs, newLog] }))
-  void pushWaterLog(newLog)
-}
-
-export function removeLatestWaterLog(date: string = getTodayDateString()): void {
-  const latest = getLatestWaterLogForDate(state.waterLogs, date)
-  setState((current) => {
-    if (!latest) return current
-    return { ...current, waterLogs: current.waterLogs.filter((log) => log.id !== latest.id) }
-  })
-  if (latest) void pushWaterLogDelete(latest.id)
-}
-
-export function setWaterGoal(goal: Partial<WaterGoal>): void {
-  setState((current) => ({ ...current, waterGoal: { ...current.waterGoal, ...goal } }))
-  void pushWaterGoal(state.waterGoal)
-}
-
 export interface HabitCloudSnapshot {
   habits: Habit[]
   entries: HabitEntry[]
-  waterLogs: WaterLog[]
-  waterGoal: WaterGoal | null
 }
 
 /**
  * Merges a cloud snapshot (pulled on sign-in) into local state: cloud
- * items win on a shared id, any local-only item is kept, and a null cloud
- * water goal means "nothing to pull yet." Returns what still needs
- * pushing so a fresh sign-in on this device reconciles both directions —
- * `localOnlyEntries` is paired with its owning habit (falling back to the
- * merged habit list) since a cloud push needs the full `Habit` to resolve
- * the entry's server-side foreign key.
+ * items win on a shared id, any local-only item is kept. Returns what
+ * still needs pushing so a fresh sign-in on this device reconciles both
+ * directions — `localOnlyEntries` is paired with its owning habit (falling
+ * back to the merged habit list) since a cloud push needs the full `Habit`
+ * to resolve the entry's server-side foreign key.
  */
 export function mergeHabitFromCloud(cloud: HabitCloudSnapshot): {
   localOnlyHabits: Habit[]
   localOnlyEntries: { entry: HabitEntry; habit: Habit }[]
-  localOnlyWaterLogs: WaterLog[]
-  waterGoalToPush: WaterGoal | null
 } {
   const cloudHabitIds = new Set(cloud.habits.map((habit) => habit.id))
   const localOnlyHabits = state.habits.filter((habit) => !cloudHabitIds.has(habit.id))
@@ -247,19 +201,12 @@ export function mergeHabitFromCloud(cloud: HabitCloudSnapshot): {
       return habit ? [{ entry, habit }] : []
     })
 
-  const cloudWaterLogIds = new Set(cloud.waterLogs.map((log) => log.id))
-  const localOnlyWaterLogs = state.waterLogs.filter((log) => !cloudWaterLogIds.has(log.id))
-
-  const waterGoalToPush = cloud.waterGoal ? null : state.waterGoal
-
-  setState((current) => ({
+  setState(() => ({
     habits: mergedHabits,
     entries: [...localOnlyEntries.map((item) => item.entry), ...cloud.entries],
-    waterLogs: [...localOnlyWaterLogs, ...cloud.waterLogs],
-    waterGoal: cloud.waterGoal ?? current.waterGoal,
   }))
 
-  return { localOnlyHabits, localOnlyEntries, localOnlyWaterLogs, waterGoalToPush }
+  return { localOnlyHabits, localOnlyEntries }
 }
 
 /**
@@ -318,21 +265,10 @@ export function purgeLegacyServerIdHabitEntries(
   return removed
 }
 
-/** See `purgeLegacyServerIdHabits` — same mechanism, for water logs. */
-export function purgeLegacyServerIdWaterLogs(serverIds: string[]): WaterLog[] {
-  if (serverIds.length === 0) return []
-  const serverIdSet = new Set(serverIds)
-  const removed = state.waterLogs.filter((log) => serverIdSet.has(log.id))
-  if (removed.length === 0) return []
-  setState((current) => ({ ...current, waterLogs: current.waterLogs.filter((log) => !serverIdSet.has(log.id)) }))
-  return removed
-}
-
 /**
- * Wipes all habit/water data for the current scope back to its clean
- * initial state (used by both tests and the production "Reset Fitness
- * Data" setting) and notifies subscribers so any mounted UI updates
- * immediately.
+ * Wipes all habit data for the current scope back to its clean initial
+ * state (used by both tests and the production "Reset Fitness Data"
+ * setting) and notifies subscribers so any mounted UI updates immediately.
  */
 export function resetHabitStoreForTests(): void {
   state = createInitialState()

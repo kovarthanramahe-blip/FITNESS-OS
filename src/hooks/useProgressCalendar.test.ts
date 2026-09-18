@@ -43,12 +43,12 @@ function setStores(overrides: { weightLogs?: WeightLog[]; workoutHistory?: Worko
   const nutritionState: NutritionStoreState = {
     entries: [],
     goal: { dailyCalories: 2000, proteinGrams: 150, carbohydrateGrams: 200, fatGrams: 60, fiberGrams: 30 },
+    waterLogs: [],
+    waterGoal: { goalMl: 2500, preferredUnit: 'l' },
   }
   const habitState: HabitStoreState = {
     habits: [],
     entries: [],
-    waterLogs: [],
-    waterGoal: { goalMl: 2500, preferredUnit: 'l' },
   }
 
   mockedUseProgressStore.mockReturnValue(progressState)

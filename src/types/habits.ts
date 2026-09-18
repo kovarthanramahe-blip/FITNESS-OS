@@ -97,25 +97,3 @@ export interface HabitStats {
   completedCount: number
   scheduledCount: number
 }
-
-// ---------------------------------------------------------------------------
-// Water tracking
-// ---------------------------------------------------------------------------
-
-export interface WaterLog {
-  id: string
-  /** ISO date string (yyyy-mm-dd). */
-  date: string
-  amountMl: number
-  /** ISO timestamp. */
-  createdAt: string
-}
-
-export type WaterUnit = 'ml' | 'l'
-
-export interface WaterGoal {
-  /** Canonical storage unit — always millilitres, regardless of display preference. */
-  goalMl: number
-  /** The user's preferred display unit; the goal itself is still stored in ml. */
-  preferredUnit: WaterUnit
-}

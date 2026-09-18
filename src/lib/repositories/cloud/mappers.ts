@@ -1,6 +1,6 @@
 import type { EarnedBadge, XPEvent, XPEventType } from '@/types/gamification'
-import type { Habit, HabitEntry, HabitIconKey, HabitCategory, HabitSchedule, WaterGoal, WaterLog } from '@/types/habits'
-import type { FoodEntry, MealType, NutritionGoal } from '@/types/nutrition'
+import type { Habit, HabitEntry, HabitIconKey, HabitCategory, HabitSchedule } from '@/types/habits'
+import type { FoodEntry, MealType, NutritionGoal, WaterGoal, WaterLog } from '@/types/nutrition'
 import type { BodyMeasurement, MeasurementUnit, PersonalRecord, PersonalRecordType, WeightGoal, WeightLog } from '@/types/progress'
 import type { Database } from '@/types/supabase'
 import type { WorkoutExercise, WorkoutHistoryEntry, WorkoutSession, WorkoutSet } from '@/types/workout'

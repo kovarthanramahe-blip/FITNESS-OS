@@ -8,8 +8,8 @@ import {
 import { isSupabaseConfigured } from '@/lib/supabase'
 import { getCurrentUserId } from '@/lib/storageScope'
 import type { EarnedBadge, XPEvent } from '@/types/gamification'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
-import type { FoodEntry, NutritionGoal } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { FoodEntry, NutritionGoal, WaterGoal, WaterLog } from '@/types/nutrition'
 import type { BodyMeasurement, PersonalRecord, WeightGoal, WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry, WorkoutSession } from '@/types/workout'
 
@@ -156,7 +156,7 @@ export async function pushWaterLog(log: WaterLog): Promise<void> {
   const userId = activeUserId()
   if (!userId) return
   try {
-    await createCloudHabitRepository(userId).saveWaterLog(log)
+    await createCloudNutritionRepository(userId).saveWaterLog(log)
   } catch (error) {
     report('saveWaterLog', error)
   }
@@ -166,7 +166,7 @@ export async function pushWaterLogDelete(clientLogId: string): Promise<void> {
   const userId = activeUserId()
   if (!userId) return
   try {
-    await createCloudHabitRepository(userId).deleteWaterLog(clientLogId)
+    await createCloudNutritionRepository(userId).deleteWaterLog(clientLogId)
   } catch (error) {
     report('deleteWaterLog', error)
   }
@@ -176,7 +176,7 @@ export async function pushWaterGoal(goal: WaterGoal): Promise<void> {
   const userId = activeUserId()
   if (!userId) return
   try {
-    await createCloudHabitRepository(userId).saveWaterGoal(goal)
+    await createCloudNutritionRepository(userId).saveWaterGoal(goal)
   } catch (error) {
     report('saveWaterGoal', error)
   }

@@ -4,7 +4,7 @@ import type { ActivitySnapshot } from '@/utils/gamification'
 import { getLevelForXp } from '@/utils/gamification'
 import { getHabitConsistencyStreak } from '@/utils/streaks'
 import { getCurrentWeekStreak } from '@/utils/progress'
-import { getDailyWaterMl } from '@/utils/habits'
+import { getDailyWaterMl } from '@/utils/nutrition'
 
 export interface BadgeContext {
   snapshot: ActivitySnapshot

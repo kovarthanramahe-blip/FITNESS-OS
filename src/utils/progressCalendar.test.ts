@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { CalendarDataSources } from './progressCalendar'
 import { getCalendarDayActivity, getCalendarMonthGrid } from './progressCalendar'
-import type { Habit, HabitEntry, WaterLog } from '@/types/habits'
-import type { FoodEntry } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { FoodEntry, WaterLog } from '@/types/nutrition'
 import type { WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry } from '@/types/workout'
 

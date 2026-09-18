@@ -6,6 +6,7 @@ import { addDaysToDateString, getTodayDateString, parseDateOnly } from '@/utils/
 export interface DateNavigatorProps {
   date: string
   onChange: (date: string) => void
+  ariaLabel?: string
 }
 
 function formatDisplayDate(date: string): string {
@@ -19,7 +20,7 @@ function formatDisplayDate(date: string): string {
  * ahead, only to stop them logging food for a day that hasn't happened,
  * which FoodEntryModal's own date field still enforces separately.
  */
-export function DateNavigator({ date, onChange }: DateNavigatorProps) {
+export function DateNavigator({ date, onChange, ariaLabel = 'Nutrition date' }: DateNavigatorProps) {
   const isToday = date === getTodayDateString()
 
   return (
@@ -29,7 +30,7 @@ export function DateNavigator({ date, onChange }: DateNavigatorProps) {
       </Button>
       <div className="flex items-center gap-2">
         <Input
-          aria-label="Nutrition date"
+          aria-label={ariaLabel}
           type="date"
           value={date}
           onChange={(event) => onChange(event.target.value)}

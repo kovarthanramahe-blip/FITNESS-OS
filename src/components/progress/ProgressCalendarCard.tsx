@@ -3,10 +3,10 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Modal } from '@/components/ui/Modal'
-import { useHabitStore } from '@/lib/habitStore'
+import { useNutritionStore } from '@/lib/nutritionStore'
 import { useProgressCalendar } from '@/hooks/useProgressCalendar'
 import { parseDateOnly } from '@/utils/dateRange'
-import { mlToLiters } from '@/utils/habits'
+import { mlToLiters } from '@/utils/nutrition'
 import type { CalendarDayActivity } from '@/utils/progressCalendar'
 import { cn } from '@/utils/cn'
 
@@ -42,7 +42,7 @@ function describeActivity(dateStr: string, activity: CalendarDayActivity, isToda
 
 export function ProgressCalendarCard() {
   const { monthLabel, grid, today, goToPreviousMonth, goToNextMonth, getActivity } = useProgressCalendar()
-  const { waterGoal } = useHabitStore()
+  const { waterGoal } = useNutritionStore()
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
 
   const selectedActivity = selectedDate ? getActivity(selectedDate) : null

@@ -1,6 +1,6 @@
 import type { EarnedBadge, XPEvent } from '@/types/gamification'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
-import type { FoodEntry, NutritionGoal } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { FoodEntry, NutritionGoal, WaterGoal, WaterLog } from '@/types/nutrition'
 import type { BodyMeasurement, PersonalRecord, WeightGoal, WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry, WorkoutSession } from '@/types/workout'
 
@@ -29,13 +29,13 @@ export interface ProgressRepository {
 export interface NutritionRepository {
   getFoodEntries(): Promise<FoodEntry[]>
   getGoal(): Promise<NutritionGoal | null>
+  getWaterLogs(): Promise<WaterLog[]>
+  getWaterGoal(): Promise<WaterGoal | null>
 }
 
 export interface HabitRepository {
   getHabits(): Promise<Habit[]>
   getEntries(): Promise<HabitEntry[]>
-  getWaterLogs(): Promise<WaterLog[]>
-  getWaterGoal(): Promise<WaterGoal | null>
 }
 
 export interface GamificationRepository {
@@ -90,8 +90,13 @@ export interface NutritionRepositoryWriter {
   saveFoodEntry(entry: FoodEntry): Promise<void>
   deleteFoodEntry(clientEntryId: string): Promise<void>
   saveGoal(goal: NutritionGoal): Promise<void>
+  saveWaterLog(log: WaterLog): Promise<void>
+  deleteWaterLog(clientLogId: string): Promise<void>
+  saveWaterGoal(goal: WaterGoal): Promise<void>
   /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
   getFoodEntryServerIds(): Promise<string[]>
+  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
+  getWaterLogServerIds(): Promise<string[]>
 }
 
 export interface HabitRepositoryWriter {
@@ -100,9 +105,6 @@ export interface HabitRepositoryWriter {
   /** Also upserts `habit` first so the parent row is guaranteed to exist before the entry references it. */
   saveEntry(entry: HabitEntry, habit: Habit): Promise<void>
   deleteEntry(clientEntryId: string): Promise<void>
-  saveWaterLog(log: WaterLog): Promise<void>
-  deleteWaterLog(clientLogId: string): Promise<void>
-  saveWaterGoal(goal: WaterGoal): Promise<void>
   /**
    * One-time local-duplicate cleanup support: maps every `habits.id`
    * (server row id) for this user to its `client_habit_id`. Used both to
@@ -114,8 +116,6 @@ export interface HabitRepositoryWriter {
   getHabitServerIdToClientId(): Promise<Record<string, string>>
   /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
   getHabitEntryServerIds(): Promise<string[]>
-  /** One-time local-duplicate cleanup support — see WorkoutRepositoryWriter.getPersonalRecordServerIds. */
-  getWaterLogServerIds(): Promise<string[]>
 }
 
 export interface GamificationRepositoryWriter {

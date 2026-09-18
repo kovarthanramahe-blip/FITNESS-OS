@@ -1,3 +1,4 @@
+import { resetActivityData } from '@/lib/activityStore'
 import { resetGamificationData } from '@/lib/gamificationStore'
 import { resetHabitData } from '@/lib/habitStore'
 import { resetNutritionData } from '@/lib/nutritionStore'
@@ -10,10 +11,10 @@ import { resetWorkoutData } from '@/lib/workoutStore'
 /**
  * Settings > Data & Privacy > "Reset Fitness Data". Wipes every
  * user-generated fitness record (workouts, weight/measurements, nutrition
- * entries, habits/water, XP/badges/challenges) for the currently active
- * scope back to zero. Never touches the auth account, the `profiles` row,
- * or the static exercise/program catalogue — those live entirely outside
- * these five stores.
+ * entries/water, habits, activity entries/steps, XP/badges/challenges) for
+ * the currently active scope back to zero. Never touches the auth account,
+ * the `profiles` row, or the static exercise/program catalogue — those
+ * live entirely outside these stores.
  *
  * When signed in, this also clears the same data in Supabase — without
  * it, the very next sign-in would pull the "reset" data right back down
@@ -38,5 +39,6 @@ export async function resetAllFitnessData(): Promise<void> {
   resetProgressData()
   resetNutritionData()
   resetHabitData()
+  resetActivityData()
   resetGamificationData()
 }

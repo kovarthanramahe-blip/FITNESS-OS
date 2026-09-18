@@ -1,9 +1,9 @@
 import { motion, useReducedMotion } from 'framer-motion'
 import { Droplets, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { addWaterLog } from '@/lib/habitStore'
-import type { WaterGoal, WaterLog } from '@/types/habits'
-import { getDailyWaterMl, getWaterGoalPercent, mlToLiters } from '@/utils/habits'
+import { addWaterLog } from '@/lib/nutritionStore'
+import type { WaterGoal, WaterLog } from '@/types/nutrition'
+import { getDailyWaterMl, getWaterGoalPercent, mlToLiters } from '@/utils/nutrition'
 import { getTodayDateString } from '@/utils/dateRange'
 import { cn } from '@/utils/cn'
 
@@ -15,7 +15,7 @@ export interface WaterCardProps {
 
 const QUICK_ADD_ML = [250, 500]
 
-/** Reads/writes the shared habitStore water state directly — no separate Dashboard-local water total. */
+/** Reads/writes the shared nutritionStore water state directly — no separate Dashboard-local water total. */
 export function WaterCard({ logs, goal, className }: WaterCardProps) {
   const prefersReducedMotion = useReducedMotion()
   const consumedMl = getDailyWaterMl(logs, getTodayDateString())

@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { WaterTracker } from './WaterTracker'
-import type { WaterGoal } from '@/types/habits'
+import type { WaterGoal } from '@/types/nutrition'
 
 const goal: WaterGoal = { goalMl: 2500, preferredUnit: 'l' }
 

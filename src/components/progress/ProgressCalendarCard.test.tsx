@@ -2,18 +2,18 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ProgressCalendarCard } from './ProgressCalendarCard'
-import { useHabitStore } from '@/lib/habitStore'
-import type { HabitStoreState } from '@/lib/habitStore'
+import { useNutritionStore } from '@/lib/nutritionStore'
+import type { NutritionStoreState } from '@/lib/nutritionStore'
 import { useProgressCalendar } from '@/hooks/useProgressCalendar'
 import type { UseProgressCalendarResult } from '@/hooks/useProgressCalendar'
 import type { CalendarDayActivity, CalendarGridDay } from '@/utils/progressCalendar'
 import { getCalendarMonthGrid } from '@/utils/progressCalendar'
 
 vi.mock('@/hooks/useProgressCalendar')
-vi.mock('@/lib/habitStore')
+vi.mock('@/lib/nutritionStore')
 
 const mockedUseProgressCalendar = vi.mocked(useProgressCalendar)
-const mockedUseHabitStore = vi.mocked(useHabitStore)
+const mockedUseNutritionStore = vi.mocked(useNutritionStore)
 
 const NO_ACTIVITY: CalendarDayActivity = {
   date: '',
@@ -46,12 +46,12 @@ function makeHookValue(overrides: Partial<UseProgressCalendarResult> = {}): UseP
 
 beforeEach(() => {
   mockedUseProgressCalendar.mockReturnValue(makeHookValue())
-  mockedUseHabitStore.mockReturnValue({
-    habits: [],
+  mockedUseNutritionStore.mockReturnValue({
     entries: [],
+    goal: { dailyCalories: 2000, proteinGrams: 150, carbohydrateGrams: 200, fatGrams: 60, fiberGrams: 30 },
     waterLogs: [],
     waterGoal: { goalMl: 2500, preferredUnit: 'l' },
-  } satisfies HabitStoreState)
+  } satisfies NutritionStoreState)
 })
 
 describe('ProgressCalendarCard — structure', () => {
@@ -144,12 +144,12 @@ describe('ProgressCalendarCard — day detail', () => {
   })
 
   it('formats water in millilitres when that is the user’s preferred unit', async () => {
-    mockedUseHabitStore.mockReturnValue({
-      habits: [],
+    mockedUseNutritionStore.mockReturnValue({
       entries: [],
+      goal: { dailyCalories: 2000, proteinGrams: 150, carbohydrateGrams: 200, fatGrams: 60, fiberGrams: 30 },
       waterLogs: [],
       waterGoal: { goalMl: 2500, preferredUnit: 'ml' },
-    } satisfies HabitStoreState)
+    } satisfies NutritionStoreState)
     mockedUseProgressCalendar.mockReturnValue(
       makeHookValue({ getActivity: (date: string) => ({ ...NO_ACTIVITY, date, waterMl: 2800, hasActivity: true }) }),
     )

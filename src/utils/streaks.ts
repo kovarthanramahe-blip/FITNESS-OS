@@ -1,10 +1,12 @@
 import { CheckCircle2, Droplets, Flame } from 'lucide-react'
 import type { ActivitySnapshot } from '@/utils/gamification'
 import type { StreakSummaryItem } from '@/types/gamification'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { WaterGoal, WaterLog } from '@/types/nutrition'
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
 import { getCurrentWeekStreak } from '@/utils/progress'
-import { getDailyWaterMl, isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
+import { getDailyWaterMl } from '@/utils/nutrition'
+import { isHabitCompletedOn, isHabitScheduledOn } from '@/utils/habits'
 
 /**
  * Consecutive scheduled days where *every* active habit due that day was

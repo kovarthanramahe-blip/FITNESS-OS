@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabase'
 import type { ChallengeCompletionRow } from '@/types/supabase'
 import type { EarnedBadge, XPEvent } from '@/types/gamification'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
-import type { FoodEntry, NutritionGoal } from '@/types/nutrition'
+import type { Habit, HabitEntry } from '@/types/habits'
+import type { FoodEntry, NutritionGoal, WaterGoal, WaterLog } from '@/types/nutrition'
 import type { BodyMeasurement, PersonalRecord, WeightGoal, WeightLog } from '@/types/progress'
 import type { WorkoutHistoryEntry, WorkoutSession } from '@/types/workout'
 import type {
@@ -217,6 +217,16 @@ export function createCloudNutritionRepository(userId: string): NutritionReposit
       if (error) throw error
       return data ? mapNutritionGoalRow(data) : null
     },
+    async getWaterLogs() {
+      const { data, error } = await client().from('water_logs').select('*').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map(mapWaterLogRow)
+    },
+    async getWaterGoal() {
+      const { data, error } = await client().from('water_goals').select('*').eq('user_id', userId).maybeSingle()
+      if (error) throw error
+      return data ? mapWaterGoalRow(data) : null
+    },
     async saveFoodEntry(entry: FoodEntry) {
       const { error } = await client()
         .from('food_entries')
@@ -237,8 +247,33 @@ export function createCloudNutritionRepository(userId: string): NutritionReposit
         .upsert(toNutritionGoalRow(userId, goal), { onConflict: 'user_id' })
       if (error) throw error
     },
+    async saveWaterLog(log: WaterLog) {
+      const { error } = await client()
+        .from('water_logs')
+        .upsert(toWaterLogRow(userId, log), { onConflict: 'user_id,client_log_id' })
+      if (error) throw error
+    },
+    async deleteWaterLog(clientLogId: string) {
+      const { error } = await client()
+        .from('water_logs')
+        .delete()
+        .eq('user_id', userId)
+        .eq('client_log_id', clientLogId)
+      if (error) throw error
+    },
+    async saveWaterGoal(goal: WaterGoal) {
+      const { error } = await client()
+        .from('water_goals')
+        .upsert(toWaterGoalRow(userId, goal), { onConflict: 'user_id' })
+      if (error) throw error
+    },
     async getFoodEntryServerIds() {
       const { data, error } = await client().from('food_entries').select('id').eq('user_id', userId)
+      if (error) throw error
+      return (data ?? []).map((row) => row.id)
+    },
+    async getWaterLogServerIds() {
+      const { data, error } = await client().from('water_logs').select('id').eq('user_id', userId)
       if (error) throw error
       return (data ?? []).map((row) => row.id)
     },
@@ -265,16 +300,6 @@ export function createCloudHabitRepository(userId: string): HabitRepository & Ha
       if (habitError) throw habitError
       const clientHabitIdByServerId = new Map((habitRows ?? []).map((row) => [row.id, row.client_habit_id]))
       return (entryRows ?? []).map((row) => mapHabitEntryRow(row, clientHabitIdByServerId))
-    },
-    async getWaterLogs() {
-      const { data, error } = await client().from('water_logs').select('*').eq('user_id', userId)
-      if (error) throw error
-      return (data ?? []).map(mapWaterLogRow)
-    },
-    async getWaterGoal() {
-      const { data, error } = await client().from('water_goals').select('*').eq('user_id', userId).maybeSingle()
-      if (error) throw error
-      return data ? mapWaterGoalRow(data) : null
     },
     async saveHabit(habit: Habit) {
       const { error } = await client()
@@ -310,26 +335,6 @@ export function createCloudHabitRepository(userId: string): HabitRepository & Ha
         .eq('client_entry_id', clientEntryId)
       if (error) throw error
     },
-    async saveWaterLog(log: WaterLog) {
-      const { error } = await client()
-        .from('water_logs')
-        .upsert(toWaterLogRow(userId, log), { onConflict: 'user_id,client_log_id' })
-      if (error) throw error
-    },
-    async deleteWaterLog(clientLogId: string) {
-      const { error } = await client()
-        .from('water_logs')
-        .delete()
-        .eq('user_id', userId)
-        .eq('client_log_id', clientLogId)
-      if (error) throw error
-    },
-    async saveWaterGoal(goal: WaterGoal) {
-      const { error } = await client()
-        .from('water_goals')
-        .upsert(toWaterGoalRow(userId, goal), { onConflict: 'user_id' })
-      if (error) throw error
-    },
     async getHabitServerIdToClientId() {
       const { data, error } = await client().from('habits').select('id, client_habit_id').eq('user_id', userId)
       if (error) throw error
@@ -337,11 +342,6 @@ export function createCloudHabitRepository(userId: string): HabitRepository & Ha
     },
     async getHabitEntryServerIds() {
       const { data, error } = await client().from('habit_entries').select('id').eq('user_id', userId)
-      if (error) throw error
-      return (data ?? []).map((row) => row.id)
-    },
-    async getWaterLogServerIds() {
-      const { data, error } = await client().from('water_logs').select('id').eq('user_id', userId)
       if (error) throw error
       return (data ?? []).map((row) => row.id)
     },

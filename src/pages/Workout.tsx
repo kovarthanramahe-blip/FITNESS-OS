@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
 import { staggerContainer, staggerItem } from '@/animations/variants'
+import { ActivityPanel } from '@/components/activity/ActivityPanel'
 import { ActiveWorkoutSession } from '@/components/workout/ActiveWorkoutSession'
 import { CustomWorkoutBuilder } from '@/components/workout/CustomWorkoutBuilder'
 import { ExerciseLibrary } from '@/components/workout/ExerciseLibrary'
@@ -18,7 +19,7 @@ import { dismissSummary, saveCustomWorkout, selectProgram, startSession, useWork
 import type { Workout as WorkoutTemplate } from '@/types/workout'
 import { getProgramWorkoutOptions, resolveProgramDay } from '@/utils/workout'
 
-type WorkoutTab = 'today' | 'programs' | 'exercises' | 'history'
+type WorkoutTab = 'today' | 'programs' | 'exercises' | 'history' | 'activity'
 
 export function Workout() {
   const { activeSession, selectedProgramId, currentDayIndex, customWorkouts, history, lastCompletedSummary } =
@@ -79,6 +80,7 @@ export function Workout() {
                 <Tab value="programs">Programs</Tab>
                 <Tab value="exercises">Exercises</Tab>
                 <Tab value="history">History</Tab>
+                <Tab value="activity">Activity</Tab>
               </TabList>
             </Tabs>
           </motion.div>
@@ -147,6 +149,12 @@ export function Workout() {
           {tab === 'history' && (
             <motion.div variants={staggerItem}>
               <WorkoutHistoryList history={history} />
+            </motion.div>
+          )}
+
+          {tab === 'activity' && (
+            <motion.div variants={staggerItem}>
+              <ActivityPanel />
             </motion.div>
           )}
 

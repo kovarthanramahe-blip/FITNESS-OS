@@ -1,6 +1,6 @@
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
 import { isHabitScheduledOn } from '@/utils/habits'
-import type { Habit, HabitEntry, WaterGoal, WaterLog } from '@/types/habits'
+import type { Habit, HabitEntry } from '@/types/habits'
 
 function daysAgoDateString(days: number): string {
   return addDaysToDateString(getTodayDateString(), -days)
@@ -134,32 +134,3 @@ function buildMockEntries(): HabitEntry[] {
 }
 
 export const mockHabitEntries: HabitEntry[] = buildMockEntries()
-
-export const mockWaterGoal: WaterGoal = {
-  goalMl: 2500,
-  preferredUnit: 'l',
-}
-
-function buildMockWaterLogs(): WaterLog[] {
-  const logs: WaterLog[] = []
-  let counter = 0
-  const amounts = [250, 500, 250, 500, 250]
-
-  for (let daysAgo = 6; daysAgo >= 0; daysAgo -= 1) {
-    const date = daysAgoDateString(daysAgo)
-    const entriesToday = daysAgo === 0 ? amounts.slice(0, 3) : amounts
-    for (const [index, amountMl] of entriesToday.entries()) {
-      counter += 1
-      logs.push({
-        id: `seed-water-${counter}`,
-        date,
-        amountMl,
-        createdAt: `${date}T${String(7 + index * 3).padStart(2, '0')}:00:00.000Z`,
-      })
-    }
-  }
-
-  return logs
-}
-
-export const mockWaterLogs: WaterLog[] = buildMockWaterLogs()
