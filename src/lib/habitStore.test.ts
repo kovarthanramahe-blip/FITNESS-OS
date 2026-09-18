@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mapHabitEntryRow, mapHabitRow, mapWaterLogRow } from '@/lib/repositories/cloud/mappers'
-import { resetStorageScopeForTests, setCurrentUserId } from '@/lib/storageScope'
+import type { WaterLog } from '@/types/habits'
+import { resetStorageScopeForTests, scopedStorageKey, setCurrentUserId } from '@/lib/storageScope'
 import {
   addHabit,
   addWaterLog,
@@ -177,6 +178,141 @@ describe('water tracking', () => {
 
     expect(getDailyWaterMl(getHabitState().waterLogs, '2024-07-01')).toBe(300)
     expect(getDailyWaterMl(getHabitState().waterLogs, '2024-07-02')).toBe(400)
+  })
+})
+
+/**
+ * Regression suite for the water date-isolation bug report: "changing
+ * today's water changes yesterday's displayed value." The root cause turned
+ * out to be in the UI layer (WaterTracker ignored Nutrition's date
+ * navigation and always read/wrote real "today" — see Nutrition.test.tsx),
+ * not in this store, but these 7 scenarios are the store-level contract the
+ * bug report requires and the UI fix depends on: every date's water total
+ * must be independently derived and never mutated by another date's writes,
+ * across local persistence and cloud sync alike.
+ */
+describe('water date isolation regression (bug fix)', () => {
+  const YESTERDAY = '2026-09-17'
+  const TODAY = '2026-09-18'
+
+  // A clean, un-seeded slate — the default (unauthenticated) store carries
+  // demo water logs for recent relative dates, which would otherwise add
+  // to these exact-ml assertions.
+  beforeEach(() => {
+    setCurrentUserId('user-water-regression')
+    resetHabitStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+    resetHabitStoreForTests()
+  })
+
+  it('1. yesterday = 3500 ml', () => {
+    addWaterLog(3500, YESTERDAY)
+    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
+  })
+
+  it('2. today = 4000 ml', () => {
+    addWaterLog(4000, TODAY)
+    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('3. updating today does not change yesterday', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    addWaterLog(500, TODAY)
+
+    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4500)
+    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
+  })
+
+  it('4. updating yesterday does not change today', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    addWaterLog(500, YESTERDAY)
+
+    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(4000)
+    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('5. reloading localStorage preserves both values', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+
+    const raw = window.localStorage.getItem(scopedStorageKey('fitness-os:habit-store:v1'))
+    const parsed = JSON.parse(raw!) as { waterLogs: WaterLog[] }
+
+    expect(getDailyWaterMl(parsed.waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(parsed.waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('6. cloud push/hydration preserves both values independently', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+    const [localYesterdayId, localTodayId] = getHabitState().waterLogs.map((log) => log.id)
+
+    // Simulate what comes back from Supabase on the next sign-in: the same
+    // two logs, round-tripped through the real mapper, keyed by their
+    // stable client ids (never the server row id — see mapWaterLogRow's
+    // doc comment for why that distinction is the whole fix for the
+    // earlier cloud-duplication bug).
+    const cloudYesterday = mapWaterLogRow({
+      id: 'server-uuid-yesterday',
+      user_id: 'user-water-regression',
+      client_log_id: localYesterdayId!,
+      log_date: YESTERDAY,
+      amount_ml: 3500,
+      created_at: `${YESTERDAY}T08:00:00.000Z`,
+    })
+    const cloudToday = mapWaterLogRow({
+      id: 'server-uuid-today',
+      user_id: 'user-water-regression',
+      client_log_id: localTodayId!,
+      log_date: TODAY,
+      amount_ml: 4000,
+      created_at: `${TODAY}T08:00:00.000Z`,
+    })
+
+    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+
+    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
+  })
+
+  it('7. no duplicate water records are created during hydration', () => {
+    addWaterLog(3500, YESTERDAY)
+    addWaterLog(4000, TODAY)
+    const [localYesterdayId, localTodayId] = getHabitState().waterLogs.map((log) => log.id)
+
+    const cloudYesterday = mapWaterLogRow({
+      id: 'server-uuid-yesterday',
+      user_id: 'user-water-regression',
+      client_log_id: localYesterdayId!,
+      log_date: YESTERDAY,
+      amount_ml: 3500,
+      created_at: `${YESTERDAY}T08:00:00.000Z`,
+    })
+    const cloudToday = mapWaterLogRow({
+      id: 'server-uuid-today',
+      user_id: 'user-water-regression',
+      client_log_id: localTodayId!,
+      log_date: TODAY,
+      amount_ml: 4000,
+      created_at: `${TODAY}T08:00:00.000Z`,
+    })
+
+    // Sign in repeatedly (app close/reopen) — hydrating the same two
+    // already-synced logs must never grow the array.
+    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+    mergeHabitFromCloud({ habits: [], entries: [], waterLogs: [cloudYesterday, cloudToday], waterGoal: null })
+
+    expect(getHabitState().waterLogs).toHaveLength(2)
+    expect(getDailyWaterMl(getHabitState().waterLogs, YESTERDAY)).toBe(3500)
+    expect(getDailyWaterMl(getHabitState().waterLogs, TODAY)).toBe(4000)
   })
 })
 

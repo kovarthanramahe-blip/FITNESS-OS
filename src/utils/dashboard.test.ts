@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { getRemaining, getScoreLabel, getWeeklyActivityFromHistory, getWeightTrendStatus } from './dashboard'
+import { getNextAction, getRemaining, getScoreLabel, getWeeklyActivityFromHistory, getWeightTrendStatus } from './dashboard'
+import type { NextActionInput } from './dashboard'
 import type { WorkoutHistoryEntry } from '@/types/workout'
 import { toDateString } from './dateRange'
 
@@ -83,5 +84,76 @@ describe('getWeeklyActivityFromHistory', () => {
     longAgo.setDate(longAgo.getDate() - 30)
     const days = getWeeklyActivityFromHistory([buildEntry(toDateString(longAgo))], today)
     expect(days.every((day) => day.status !== 'complete')).toBe(true)
+  })
+})
+
+describe('getNextAction', () => {
+  // Every signal "on track" by default — individual tests knock exactly
+  // one out of range to prove the priority order in isolation.
+  const ALL_ON_TRACK: NextActionInput = {
+    hasWorkoutScheduledToday: true,
+    workoutCompletedToday: true,
+    proteinConsumed: 150,
+    proteinTarget: 150,
+    waterConsumedMl: 2500,
+    waterGoalMl: 2500,
+    nextIncompleteHabitName: null,
+  }
+
+  it('returns null when every signal is already on track — never invents a recommendation', () => {
+    expect(getNextAction(ALL_ON_TRACK)).toBeNull()
+  })
+
+  it('prioritizes an incomplete scheduled workout above everything else', () => {
+    const action = getNextAction({
+      ...ALL_ON_TRACK,
+      workoutCompletedToday: false,
+      proteinConsumed: 10, // also behind, but workout must still win
+    })
+    expect(action).toMatchObject({ id: 'workout', href: '/workout' })
+  })
+
+  it('does not suggest a workout on a rest day, even if nothing else has happened yet', () => {
+    const action = getNextAction({
+      ...ALL_ON_TRACK,
+      hasWorkoutScheduledToday: false,
+      workoutCompletedToday: false,
+    })
+    expect(action?.id).not.toBe('workout')
+  })
+
+  it('suggests logging protein when significantly below target (workout already done)', () => {
+    const action = getNextAction({ ...ALL_ON_TRACK, proteinConsumed: 50, proteinTarget: 150 })
+    expect(action).toMatchObject({ id: 'protein', href: '/nutrition' })
+    expect(action?.description).toContain('100g')
+  })
+
+  it('does not flag protein merely for being slightly under target', () => {
+    // 120/150 = 80%, above the "significantly behind" threshold.
+    const action = getNextAction({ ...ALL_ON_TRACK, proteinConsumed: 120, proteinTarget: 150 })
+    expect(action).toBeNull()
+  })
+
+  it('suggests logging water once workout and protein are on track', () => {
+    const action = getNextAction({ ...ALL_ON_TRACK, waterConsumedMl: 1000, waterGoalMl: 2500 })
+    expect(action).toMatchObject({ id: 'water', href: '/nutrition' })
+    expect(action?.description).toContain('1.5L')
+  })
+
+  it('suggests the next incomplete habit once workout, protein, and water are all on track', () => {
+    const action = getNextAction({ ...ALL_ON_TRACK, nextIncompleteHabitName: 'Read 10 pages' })
+    expect(action).toMatchObject({ id: 'habit', href: '/habits' })
+    expect(action?.title).toContain('Read 10 pages')
+  })
+
+  it('never suggests water/protein when no goal is set (target 0 is not "behind")', () => {
+    const action = getNextAction({
+      ...ALL_ON_TRACK,
+      proteinConsumed: 0,
+      proteinTarget: 0,
+      waterConsumedMl: 0,
+      waterGoalMl: 0,
+    })
+    expect(action).toBeNull()
   })
 })

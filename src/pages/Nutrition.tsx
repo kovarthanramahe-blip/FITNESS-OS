@@ -89,8 +89,9 @@ export function Nutrition() {
         <WaterTracker
           logs={waterLogs}
           goal={waterGoal}
-          onAdd={(amountMl) => addWaterLog(amountMl)}
-          onUndo={() => removeLatestWaterLog()}
+          date={selectedDate}
+          onAdd={(amountMl) => addWaterLog(amountMl, selectedDate)}
+          onUndo={() => removeLatestWaterLog(selectedDate)}
           onEditGoal={() => setIsWaterGoalModalOpen(true)}
         />
       </motion.div>

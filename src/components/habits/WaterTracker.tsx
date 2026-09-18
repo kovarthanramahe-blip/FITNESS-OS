@@ -11,6 +11,15 @@ import { getTodayDateString } from '@/utils/dateRange'
 export interface WaterTrackerProps {
   logs: WaterLog[]
   goal: WaterGoal
+  /**
+   * The calendar date this tracker reads and writes, as a yyyy-mm-dd
+   * string — defaults to today for callers with no date navigation of
+   * their own (Habits page, Dashboard). A page that lets the user browse
+   * other dates (e.g. Nutrition's DateNavigator) must pass its selected
+   * date here; otherwise this component silently displays and edits
+   * today's water regardless of what date the rest of the page shows.
+   */
+  date?: string
   onAdd: (amountMl: number) => void
   onUndo: () => void
   onEditGoal: () => void
@@ -22,13 +31,14 @@ function formatAmount(ml: number, unit: WaterGoal['preferredUnit']): string {
   return unit === 'l' ? `${mlToLiters(ml)} L` : `${ml} ml`
 }
 
-export function WaterTracker({ logs, goal, onAdd, onUndo, onEditGoal }: WaterTrackerProps) {
+export function WaterTracker({ logs, goal, date, onAdd, onUndo, onEditGoal }: WaterTrackerProps) {
   const [customAmount, setCustomAmount] = useState('')
-  const today = getTodayDateString()
-  const consumedMl = getDailyWaterMl(logs, today)
+  const activeDate = date ?? getTodayDateString()
+  const isToday = activeDate === getTodayDateString()
+  const consumedMl = getDailyWaterMl(logs, activeDate)
   const percent = getWaterGoalPercent(consumedMl, goal.goalMl)
   const remainingMl = getRemainingWaterMl(consumedMl, goal.goalMl)
-  const hasLoggedToday = logs.some((log) => log.date === today)
+  const hasLoggedForDate = logs.some((log) => log.date === activeDate)
 
   const customValue = Number(customAmount)
   const customValueMl = goal.preferredUnit === 'l' ? litersToMl(customValue || 0) : Math.round(customValue || 0)
@@ -45,7 +55,7 @@ export function WaterTracker({ logs, goal, onAdd, onUndo, onEditGoal }: WaterTra
       <CardHeader>
         <div className="flex items-center gap-2">
           <Droplets className="size-5 text-secondary" />
-          <CardTitle>Water</CardTitle>
+          <CardTitle>{isToday ? 'Water' : `Water · ${activeDate}`}</CardTitle>
         </div>
         <Button variant="ghost" size="icon" aria-label="Edit water goal" onClick={onEditGoal}>
           <Settings2 className="size-4" />
@@ -80,7 +90,7 @@ export function WaterTracker({ logs, goal, onAdd, onUndo, onEditGoal }: WaterTra
           size="sm"
           leftIcon={<Undo2 className="size-3.5" />}
           onClick={onUndo}
-          disabled={!hasLoggedToday}
+          disabled={!hasLoggedForDate}
         >
           Undo latest
         </Button>

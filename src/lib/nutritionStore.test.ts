@@ -328,3 +328,68 @@ describe('local persistence survives closing and reopening the app without dupli
     expect(third.getNutritionState().entries).toHaveLength(afterFirstOpen)
   })
 })
+
+/**
+ * Explicit date-isolation regression requested alongside the water bug fix:
+ * unlike water (which had a real UI-wiring bug — see Nutrition.test.tsx),
+ * nutrition entries already carry their own `date` field end-to-end
+ * (FoodEntryModal's `defaultDate`, `getDailyNutrition`/`getEntriesForDate`
+ * always filtering by exact date-string match). These tests document and
+ * lock in that yesterday's nutrition is never the same as today's.
+ */
+describe('nutrition date isolation (yesterday != today)', () => {
+  const YESTERDAY = '2026-09-17'
+  const TODAY = '2026-09-18'
+
+  // A signed-in, un-seeded slate — the default (unauthenticated) store
+  // carries demo food entries for recent relative dates, which would
+  // otherwise add to these exact-calorie assertions.
+  beforeEach(() => {
+    setCurrentUserId('user-nutrition-date-regression')
+    resetNutritionStoreForTests()
+  })
+
+  afterEach(() => {
+    resetStorageScopeForTests()
+  })
+
+  it('yesterday and today accumulate independent totals', () => {
+    addFoodEntry({ ...SAMPLE_ENTRY, date: YESTERDAY, calories: 1800 })
+    addFoodEntry({ ...SAMPLE_ENTRY, date: TODAY, calories: 2200 })
+
+    expect(getDailyTotalsFromStore(YESTERDAY).calories).toBe(1800)
+    expect(getDailyTotalsFromStore(TODAY).calories).toBe(2200)
+  })
+
+  it('adding an entry for today does not change yesterday\'s totals', () => {
+    addFoodEntry({ ...SAMPLE_ENTRY, date: YESTERDAY, calories: 1800 })
+    addFoodEntry({ ...SAMPLE_ENTRY, date: TODAY, calories: 2200 })
+
+    addFoodEntry({ ...SAMPLE_ENTRY, date: TODAY, calories: 300 })
+
+    expect(getDailyTotalsFromStore(TODAY).calories).toBe(2500)
+    expect(getDailyTotalsFromStore(YESTERDAY).calories).toBe(1800)
+  })
+
+  it('editing today\'s entry does not change yesterday\'s entries', () => {
+    addFoodEntry({ ...SAMPLE_ENTRY, date: YESTERDAY, calories: 1800 })
+    addFoodEntry({ ...SAMPLE_ENTRY, date: TODAY, calories: 2200 })
+    const todayEntry = getEntriesForDateFromStore(TODAY)[0]!
+
+    editFoodEntry(todayEntry.id, { calories: 9999 })
+
+    expect(getDailyTotalsFromStore(TODAY).calories).toBe(9999)
+    expect(getDailyTotalsFromStore(YESTERDAY).calories).toBe(1800)
+  })
+
+  it('deleting today\'s entry does not remove yesterday\'s', () => {
+    addFoodEntry({ ...SAMPLE_ENTRY, date: YESTERDAY, calories: 1800 })
+    addFoodEntry({ ...SAMPLE_ENTRY, date: TODAY, calories: 2200 })
+    const todayEntry = getEntriesForDateFromStore(TODAY)[0]!
+
+    deleteFoodEntry(todayEntry.id)
+
+    expect(getEntriesForDateFromStore(TODAY)).toHaveLength(0)
+    expect(getDailyTotalsFromStore(YESTERDAY).calories).toBe(1800)
+  })
+})

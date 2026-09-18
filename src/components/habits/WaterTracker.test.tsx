@@ -86,4 +86,44 @@ describe('WaterTracker', () => {
     await user.click(screen.getByRole('button', { name: 'Edit water goal' }))
     expect(handleEditGoal).toHaveBeenCalledOnce()
   })
+
+  describe('date prop (regression: water must respect the page\'s selected date, not always "today")', () => {
+    const logs = [
+      { id: 'w-yesterday', date: '2026-09-17', amountMl: 3500, createdAt: '2026-09-17T08:00:00.000Z' },
+      { id: 'w-today', date: '2026-09-18', amountMl: 4000, createdAt: '2026-09-18T08:00:00.000Z' },
+    ]
+
+    it('shows the total for the given date, not always today\'s total', () => {
+      render(<WaterTracker logs={logs} goal={goal} date="2026-09-17" onAdd={() => {}} onUndo={() => {}} onEditGoal={() => {}} />)
+      // 3500 ml in liters, per the fixture above — never 4.0 L (that date's own total).
+      expect(screen.getByTestId('water-total')).toHaveTextContent('3.5 L')
+    })
+
+    it('enables/disables undo based on the given date\'s own logs, independent of other dates', () => {
+      render(<WaterTracker logs={logs} goal={goal} date="2099-01-01" onAdd={() => {}} onUndo={() => {}} onEditGoal={() => {}} />)
+      // No logs exist for 2099-01-01, even though both fixture dates have entries.
+      expect(screen.getByRole('button', { name: 'Undo latest' })).toBeDisabled()
+    })
+
+    it('labels the card with the date when viewing a non-today date', () => {
+      render(<WaterTracker logs={logs} goal={goal} date="2026-09-17" onAdd={() => {}} onUndo={() => {}} onEditGoal={() => {}} />)
+      expect(screen.getByText('Water · 2026-09-17')).toBeInTheDocument()
+    })
+
+    it('defaults to today when no date prop is given (unchanged behavior for callers without date navigation)', () => {
+      const today = new Date()
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+      render(
+        <WaterTracker
+          logs={[{ id: 'w1', date: todayStr, amountMl: 1000, createdAt: new Date().toISOString() }]}
+          goal={goal}
+          onAdd={() => {}}
+          onUndo={() => {}}
+          onEditGoal={() => {}}
+        />,
+      )
+      expect(screen.getByText('Water')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Undo latest' })).toBeEnabled()
+    })
+  })
 })

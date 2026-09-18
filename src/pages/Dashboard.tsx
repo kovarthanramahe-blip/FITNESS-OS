@@ -8,6 +8,7 @@ import { XPProgressCard } from '@/components/gamification/XPProgressCard'
 import { DailyScoreCard } from '@/components/dashboard/DailyScoreCard'
 import { DashboardHeader } from '@/components/dashboard/DashboardHeader'
 import { HabitsCard } from '@/components/dashboard/HabitsCard'
+import { NextActionCard } from '@/components/dashboard/NextActionCard'
 import { NutrientProgressCard } from '@/components/dashboard/NutrientProgressCard'
 import { PersonalRecordsCard } from '@/components/dashboard/PersonalRecordsCard'
 import { StepsCard } from '@/components/dashboard/StepsCard'
@@ -26,7 +27,8 @@ import { useProgressStore } from '@/lib/progressStore'
 import { useWorkoutStore } from '@/lib/workoutStore'
 import type { NutrientSummary } from '@/types/dashboard'
 import { getTodayDateString } from '@/utils/dateRange'
-import { getWeeklyActivityFromHistory } from '@/utils/dashboard'
+import { getNextAction, getWeeklyActivityFromHistory } from '@/utils/dashboard'
+import { getDailyWaterMl, getHabitStatusForDate } from '@/utils/habits'
 import { getDailyTotals, goalToMacroTargets } from '@/utils/nutrition'
 import { getCurrentWeightLog, getWeightChangeOverDays } from '@/utils/progress'
 import { getTodaysWorkoutSummary, resolveProgramDay } from '@/utils/workout'
@@ -83,6 +85,20 @@ export function Dashboard() {
 
   const { habits, entries: habitEntries, waterLogs, waterGoal } = useHabitStore()
 
+  const today = getTodayDateString()
+  const nextIncompleteHabit = habits.find(
+    (habit) => getHabitStatusForDate(habit, habitEntries, today) === 'pending',
+  )
+  const nextAction = getNextAction({
+    hasWorkoutScheduledToday: programDay?.type === 'workout',
+    workoutCompletedToday: history.some((entry) => entry.date.slice(0, 10) === today),
+    proteinConsumed: protein.consumed,
+    proteinTarget: protein.target,
+    waterConsumedMl: getDailyWaterMl(waterLogs, today),
+    waterGoalMl: waterGoal.goalMl,
+    nextIncompleteHabitName: nextIncompleteHabit?.name ?? null,
+  })
+
   // Re-renders whenever the gamification store changes (new XP/badges from
   // useGamificationSync, mounted once in AppLayout); stats are always
   // recomputed fresh from live store data, never a separate dataset.
@@ -101,6 +117,10 @@ export function Dashboard() {
     >
       <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-12">
         <DashboardHeader header={header} />
+      </motion.div>
+
+      <motion.div variants={staggerItem} className="md:col-span-2 lg:col-span-12">
+        <NextActionCard action={nextAction} />
       </motion.div>
 
       <motion.div variants={staggerItem} className="lg:col-span-4">
