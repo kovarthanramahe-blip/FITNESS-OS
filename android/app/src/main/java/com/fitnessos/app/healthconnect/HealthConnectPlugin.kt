@@ -107,8 +107,13 @@ class HealthConnectPlugin : Plugin() {
         }
     }
 
+    // Named requestHealthConnectPermissions (not requestPermissions) — Plugin
+    // already declares a `requestPermissions` member for the standard Android
+    // runtime-permission flow, which this plugin doesn't use (Health Connect
+    // permissions go through PermissionController, not that mechanism); reusing
+    // the name would hide the supertype method instead of overriding it.
     @PluginMethod
-    fun requestPermissions(call: PluginCall) {
+    fun requestHealthConnectPermissions(call: PluginCall) {
         val current = clientOrNull()
         if (current == null) {
             // Nothing to request against — resolve with the same shape

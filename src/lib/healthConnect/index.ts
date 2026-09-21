@@ -126,7 +126,7 @@ export async function getStatus(): Promise<HealthConnectStatus> {
 export async function requestPermissions(): Promise<HealthConnectStatus> {
   if (!isNative()) return { connection: 'unavailable', hasHistoryPermission: false }
   try {
-    const payload = await HealthConnect.requestPermissions()
+    const payload = await HealthConnect.requestHealthConnectPermissions()
     return toStatus(payload)
   } catch (error) {
     throw toHealthConnectError(error, 'UNKNOWN')

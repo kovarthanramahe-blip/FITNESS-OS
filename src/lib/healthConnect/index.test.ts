@@ -7,15 +7,16 @@ function mockCapacitor(isNative: boolean) {
 function mockPlugin(overrides: {
   isAvailable?: ReturnType<typeof vi.fn>
   getStatus?: ReturnType<typeof vi.fn>
-  requestPermissions?: ReturnType<typeof vi.fn>
+  requestHealthConnectPermissions?: ReturnType<typeof vi.fn>
   getSteps?: ReturnType<typeof vi.fn>
   openSettings?: ReturnType<typeof vi.fn>
 } = {}) {
   const HealthConnect = {
     isAvailable: overrides.isAvailable ?? vi.fn().mockResolvedValue({ available: true }),
     getStatus: overrides.getStatus ?? vi.fn().mockResolvedValue({ available: true, hasStepsPermission: true, hasHistoryPermission: false }),
-    requestPermissions:
-      overrides.requestPermissions ?? vi.fn().mockResolvedValue({ available: true, hasStepsPermission: true, hasHistoryPermission: false }),
+    requestHealthConnectPermissions:
+      overrides.requestHealthConnectPermissions ??
+      vi.fn().mockResolvedValue({ available: true, hasStepsPermission: true, hasHistoryPermission: false }),
     getSteps: overrides.getSteps ?? vi.fn().mockResolvedValue({ results: [] }),
     openSettings: overrides.openSettings ?? vi.fn().mockResolvedValue(undefined),
   }
@@ -108,12 +109,14 @@ describe('requestPermissions — permission request', () => {
     const { requestPermissions } = await import('./index')
 
     expect(await requestPermissions()).toEqual({ connection: 'unavailable', hasHistoryPermission: false })
-    expect(plugin.requestPermissions).not.toHaveBeenCalled()
+    expect(plugin.requestHealthConnectPermissions).not.toHaveBeenCalled()
   })
 
   it('resolves connected when the user grants steps permission', async () => {
     mockCapacitor(true)
-    mockPlugin({ requestPermissions: vi.fn().mockResolvedValue({ available: true, hasStepsPermission: true, hasHistoryPermission: false }) })
+    mockPlugin({
+      requestHealthConnectPermissions: vi.fn().mockResolvedValue({ available: true, hasStepsPermission: true, hasHistoryPermission: false }),
+    })
     const { requestPermissions } = await import('./index')
 
     expect(await requestPermissions()).toEqual({ connection: 'connected', hasHistoryPermission: false })
@@ -121,7 +124,9 @@ describe('requestPermissions — permission request', () => {
 
   it('resolves permission-required (not an error) when the user dismisses without granting', async () => {
     mockCapacitor(true)
-    mockPlugin({ requestPermissions: vi.fn().mockResolvedValue({ available: true, hasStepsPermission: false, hasHistoryPermission: false }) })
+    mockPlugin({
+      requestHealthConnectPermissions: vi.fn().mockResolvedValue({ available: true, hasStepsPermission: false, hasHistoryPermission: false }),
+    })
     const { requestPermissions } = await import('./index')
 
     await expect(requestPermissions()).resolves.toEqual({ connection: 'permission-required', hasHistoryPermission: false })
@@ -129,7 +134,9 @@ describe('requestPermissions — permission request', () => {
 
   it('throws a HealthConnectError for a genuine native failure', async () => {
     mockCapacitor(true)
-    mockPlugin({ requestPermissions: vi.fn().mockRejectedValue(Object.assign(new Error('native crash'), { code: 'UNKNOWN' })) })
+    mockPlugin({
+      requestHealthConnectPermissions: vi.fn().mockRejectedValue(Object.assign(new Error('native crash'), { code: 'UNKNOWN' })),
+    })
     const { requestPermissions, HealthConnectError } = await import('./index')
 
     await expect(requestPermissions()).rejects.toBeInstanceOf(HealthConnectError)
