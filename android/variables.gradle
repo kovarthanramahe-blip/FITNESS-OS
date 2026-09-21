@@ -15,4 +15,8 @@ ext {
     androidxJunitVersion = '1.3.0'
     androidxEspressoCoreVersion = '3.7.0'
     cordovaAndroidVersion = '14.0.1'
+    // Must match the literal 'org.jetbrains.kotlin:kotlin-gradle-plugin' classpath
+    // version in the root build.gradle's buildscript block (that block runs
+    // before this file is applied, so it can't reference this variable).
+    kotlinVersion = '2.0.21'
 }

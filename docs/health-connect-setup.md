@@ -1,93 +1,106 @@
-# Health Connect — Phase 8A foundation + Phase 8B.1 (real steps)
+# Health Connect — Activity-domain integration
 
 This documents what's actually implemented, so later phases (exercise
-sync, Galaxy Watch/Samsung Health) build on an accurate picture instead of
-assumptions.
+session import, richer history) build on an accurate picture instead of
+assumptions. Reimplemented from scratch against the current Activity
+domain (`ActivityEntry` / `DailySteps`) after the original Phase 8
+implementation was removed — it does not restore or extend that code.
 
 ## What this covers, and doesn't
 
 **Is:** availability detection, a native Capacitor bridge, a permission
-request/check flow for exactly two read-only permissions (steps, exercise
-session), a Settings UI reflecting connection state, the mandatory
-privacy-rationale screens Health Connect requires to show its permission
-dialog at all, and (Phase 8B.1) reading real daily step totals for the
-last 7 days once connected.
+request/check flow for two read-only permissions (steps, plus the
+optional "read health data history" permission), a Health Connect status
+section on the Activity tab, and reading real daily step totals — always
+via Health Connect's own aggregate API, never raw records summed by hand.
 
 **Is not:** reading or writing exercise session data, writing anything to
-Health Connect, syncing anything to Supabase, or any other health metric
-(heart rate, sleep, location, nutrition, weight, body composition).
-"Sync Now" re-checks availability/permission state and re-reads step
-data — it does not transfer any health data to Supabase or elsewhere.
+Health Connect, syncing anything to Supabase, a direct Samsung Health SDK
+integration, or any other health metric (heart rate, sleep, location,
+nutrition, weight, body composition). The integration boundary is always
+Health Connect —
 
-## Why minSdk changed from 24 to 26
+```
+Galaxy Watch -> Samsung Health -> Health Connect -> Fitness OS
+```
 
-`androidx.health.connect:connect-client`'s current **stable** release
-(`1.1.0`) requires `minSdk 26` (Android 8.0) — confirmed by checking the
-requirement was not relaxed until the `1.2.0-alpha` pre-release track,
-which this project deliberately does not use for a production dependency.
-Building against the stable client without raising `minSdk` fails at
-Gradle's manifest-merge step. This is a real, unavoidable side effect of
-adding Health Connect, not an unrelated version change — Android 8.0 has a
-small and shrinking installed base as of 2026.
+— this app never talks to Samsung Health directly and has no way to know
+which original source contributed to an aggregated total, so results are
+always labeled "Health Connect," never "Samsung Health."
+
+## Why minSdk is 26
+
+`androidx.health.connect:connect-client`'s stable release (`1.1.0`)
+requires `minSdk 26` (Android 8.0). This was already the case before this
+phase (see `variables.gradle`) and did not need to change again.
 
 ## Native architecture
 
 - `android/app/src/main/java/com/fitnessos/app/healthconnect/HealthConnectPlugin.kt`
   — the Capacitor plugin (`@CapacitorPlugin(name = "HealthConnect")`),
-  registered in `MainActivity.java`. Exposes six methods, all of which
-  resolve (never crash) even when Health Connect is unavailable:
-  `isAvailable`, `getStatus`, `getGrantedPermissions`, `requestPermissions`,
-  `openSettings`, and `getSteps({ startDate, endDate })`.
-  `getSteps` takes inclusive `yyyy-mm-dd` local dates and reads
-  `StepsRecord` totals via `aggregateGroupByPeriod` (a `LocalDateTime`-based
-  `TimeRangeFilter` sliced into 1-day `Period`s), which buckets by local
-  calendar date and lets Health Connect's own aggregation de-duplicate
-  overlapping/contributing records — summing raw records by hand would risk
-  double-counting instead. Every failure mode (Health Connect unavailable,
-  `READ_STEPS` not granted, an unparsable/inverted date range, or the read
-  itself throwing) resolves with a typed `error` rather than rejecting.
+  registered in `MainActivity.java`. Exposes `isAvailable`, `getStatus`,
+  `requestPermissions`, `getSteps({ startDate, endDate })`, and
+  `openSettings`, all resolving (never crashing) even when Health Connect
+  is unavailable, with a stable error `code` on rejection so the
+  TypeScript side can distinguish unavailable / permission-denied / a
+  genuine read failure from a legitimate zero.
+  - `getSteps` reads `StepsRecord.COUNT_TOTAL` via `aggregateGroupByPeriod`
+    sliced into 1-day `Period`s — one Health Connect call for the whole
+    requested range, bucketed per local calendar day, letting Health
+    Connect's own source de-duplication/priority resolution do its job.
+    It deliberately never filters by `DataOrigin`: Health Connect can
+    attribute a phone's native step sensor to a per-device Synthetic
+    Package Name that isn't stable across devices/versions, so hard-coding
+    any origin (old or new) would silently exclude real data.
+  - Permission requests use Health Connect's own
+    `PermissionController.createRequestPermissionResultContract()` via
+    Capacitor's `startActivityForResult` + `@ActivityCallback`, re-reading
+    the authoritative granted-permission set afterward rather than trusting
+    the activity result payload alone.
 - `android/app/src/main/java/com/fitnessos/app/healthconnect/PermissionsRationaleActivity.kt`
-  — the native screen Health Connect's own permission UI links to. Required
-  on every Android version Health Connect supports; without it, Health
-  Connect refuses to show the permission dialog for this app at all. Purely
-  static text for this phase, matching what the manifest declares.
-- Two permissions only, both read-only:
-  `android.permission.health.READ_STEPS`,
-  `android.permission.health.READ_EXERCISE`.
+  — the static native screen Health Connect's own permission UI links to;
+  required on every Android version Health Connect supports.
+- Kotlin support was re-added to the Android project (`kotlin-android`
+  Gradle plugin, `jvmTarget = "21"` to match `capacitor.build.gradle`'s
+  Java 21 `sourceCompatibility`/`targetCompatibility`) since the client
+  library is Kotlin-first.
+- Two permissions, both read-only: `android.permission.health.READ_STEPS`
+  and `android.permission.health.READ_HEALTH_DATA_HISTORY`.
 
 ## React/TypeScript architecture
 
-- `src/lib/healthConnect/` — the isolated bridge module. `plugin.ts` wraps
-  `registerPlugin<HealthConnectPlugin>('HealthConnect')`; `index.ts` is the
-  public API every other file should import
-  (`isAvailable/getStatus/getGrantedPermissions/requestPermissions/openSettings/getSteps`),
-  with a web/non-native fallback (reports "unavailable", never throws) so
-  nothing native is required to run the rest of the app, in tests or on
-  web. `getSteps(startDate, endDate)` also validates the date range itself
-  (malformed date, invalid calendar date, `startDate > endDate`) before
-  ever reaching the native side, reusing `parseDateOnly`/`toDateString`
-  from `src/utils/dateRange.ts` — the same local-date handling the rest of
-  the app uses, never `new Date("yyyy-mm-dd")`/UTC conversion.
-- `src/hooks/useHealthConnect.ts` — the stateful hook the Settings UI reads:
-  status, granted permissions, loading, error, plus `connect()` (requests
-  permissions) and `refresh()` (re-checks status/permissions — the "Sync
-  Now" action). Also `steps`/`stepsLoading`/`stepsError`/`refreshSteps()`,
-  which reads the last 7 days (today inclusive) on mount and again on
-  "Sync Now" — no polling.
-- `src/components/settings/HealthDevicesSection.tsx` — the "Health &
-  Devices" Settings section, wired into `src/pages/Settings.tsx` in place
-  of the old "Connected Devices" placeholder row. Shows "Today's Steps" and
-  a "Last 7 Days" list once connected, using only real Health Connect data.
+- `src/lib/healthConnect/plugin.ts` — wraps
+  `registerPlugin<HealthConnectPlugin>('HealthConnect')`.
+- `src/lib/healthConnect/index.ts` — the public API every other file
+  imports (`isAvailable`, `getStatus`, `requestPermissions`, `getSteps`,
+  `openSettings`), with a web/non-native fallback (reports "unavailable,"
+  never throws or hangs) and its own date validation — reusing
+  `parseDateOnly`/`toDateString` from `src/utils/dateRange.ts`, never
+  `new Date("yyyy-mm-dd")`/UTC conversion — before ever reaching the
+  native side.
+- `src/hooks/useHealthConnect.ts` — drives the Activity screen's Health
+  Connect section: `status`, `hasHistoryPermission`, `error`/`stepsError`,
+  `connect()`, `refresh()`, `openSettings()`. Runs one status check (and,
+  if already connected, one 7-day steps read) when the Activity screen
+  mounts — no polling, no background sync — and otherwise only syncs on
+  an explicit `connect()`/`refresh()` call. Writes into the existing
+  `activityStore` (`DailySteps`, `source: 'health-connect'`) via
+  `setStepsForDate`, whose existing upsert-by-date behavior is what makes
+  a repeated refresh replace a date's imported value instead of
+  duplicating it; this hook never touches `ActivityEntry` records.
+- `src/components/activity/HealthConnectStatusCard.tsx` — the status/
+  actions card on the Activity tab (Connected / Permission required /
+  Unavailable, "Connect Health Connect," "Refresh Steps," "Open Health
+  Connect Settings"). Steps live on the Activity tab only — never under
+  Settings.
 
 ## Manual step still required (not done by this phase)
 
-None — unlike the Google OAuth redirect URL, Health Connect's permission
-model needs no external dashboard configuration. Everything required lives
-in the manifest and the native plugin.
+None — everything required lives in the manifest and the native plugin.
 
 ## What later phases add on top of this
 
-Reading actual step/exercise data, writing anything, any additional
-permission (heart rate, sleep, distance, calories, etc.), and any
-Supabase sync of health data are all explicitly out of scope here and
-will each need their own review of exactly what's requested and why.
+Reading exercise session data, writing anything, any additional
+permission (heart rate, sleep, distance, calories, etc.), any Supabase
+sync of health data, and a richer historical-data browser beyond the
+Today/Yesterday/Last 7 Days view are all explicitly out of scope here.

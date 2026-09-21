@@ -44,9 +44,53 @@
                 android:resource="@xml/file_paths"></meta-data>
         </provider>
 
+        <!-- Health Connect: the privacy-rationale screen Health Connect's own
+             permission dialog links to. Required for the dialog to appear at
+             all — without it, requestPermissions() silently does nothing on
+             real devices. Two ways of wiring it are declared because Health
+             Connect's own requirement changed across versions/API levels:
+             the older intent action, and (API 34+) the ViewPermissionUsageActivity
+             alias Health Connect now looks for first. -->
+        <activity
+            android:name=".healthconnect.PermissionsRationaleActivity"
+            android:exported="true"
+            android:theme="@style/AppTheme">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias
+            android:name=".healthconnect.PermissionsRationaleActivityAlias"
+            android:exported="true"
+            android:targetActivity=".healthconnect.PermissionsRationaleActivity"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
     </application>
 
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+
+    <!-- Health Connect: read-only step data, plus the optional permission to
+         read data logged before this app first requested access (subject to
+         the user granting it — see docs/health-connect-setup.md). Neither
+         permission lets this app write anything to Health Connect. -->
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_HISTORY" />
+
+    <!-- Android 11+ package-visibility: lets this app detect whether the
+         Health Connect app is installed (isAvailable()) and launch its
+         settings screen (openSettings()). -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+        </intent>
+    </queries>
 </manifest>

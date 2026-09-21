@@ -2,12 +2,14 @@ import { Flame, Footprints, Plus, Timer } from 'lucide-react'
 import { useState } from 'react'
 import { AddActivityModal } from '@/components/activity/AddActivityModal'
 import { ActivityHistoryList } from '@/components/activity/ActivityHistoryList'
+import { HealthConnectStatusCard } from '@/components/activity/HealthConnectStatusCard'
 import { StepsChart } from '@/components/activity/StepsChart'
 import { Button } from '@/components/ui/Button'
 import { Card, CardHeader, CardTitle } from '@/components/ui/Card'
 import { Input } from '@/components/ui/Input'
 import { StatCard } from '@/components/ui/StatCard'
 import { DateNavigator } from '@/components/nutrition/DateNavigator'
+import { useHealthConnect } from '@/hooks/useHealthConnect'
 import { deleteActivity, logActivity, setStepsForDate, useActivityStore } from '@/lib/activityStore'
 import { useProgressStore } from '@/lib/progressStore'
 import { addDaysToDateString, getTodayDateString } from '@/utils/dateRange'
@@ -26,6 +28,7 @@ export function ActivityPanel() {
   const { entries, dailySteps } = useActivityStore()
   const { weightLogs } = useProgressStore()
   const currentWeightKg = getCurrentWeightLog(weightLogs)?.weightKg ?? null
+  const healthConnect = useHealthConnect()
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString())
   const [isAddOpen, setIsAddOpen] = useState(false)
@@ -69,6 +72,9 @@ export function ActivityPanel() {
       <Card padding="lg">
         <CardHeader>
           <CardTitle>Steps</CardTitle>
+          {healthConnect.status === 'connected' && (
+            <span className="text-xs text-text-muted">Source: Health Connect</span>
+          )}
         </CardHeader>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           <div>
@@ -95,6 +101,8 @@ export function ActivityPanel() {
           </div>
         </div>
       </Card>
+
+      <HealthConnectStatusCard healthConnect={healthConnect} />
 
       <StepsChart history={last7DaysHistory} />
 
